@@ -1,0 +1,7 @@
+body {
+    padding: 10px
+}
+
+/** work-around until req() can be properly set up.. **/
+.shiny-output-error { visibility: hidden; }
+.shiny-output-error:before { visibility: hidden; }
