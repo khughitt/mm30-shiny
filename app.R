@@ -22,26 +22,28 @@ options(spinner.color="#00bc8c")
 options(digits = 3)
 set.seed(1)
 
+cfg <- read_yaml("config/config-1.0.yml")
+
 # load MM25 combined scores / pvals
 
 # genes
-mm25_gene_scores <- read_feather('/data/nih/fassoc/1.0/summary/gene_scores.feather')
+mm25_gene_scores <- read_feather(cfg$gene_scores)
 
-mm25_genes <- read_feather('/data/nih/fassoc/1.0/summary/gene_pvals.feather') %>%
+mm25_genes <- read_feather(cfg$gene_pvals) %>%
   inner_join(mm25_gene_scores, by = 'symbol')
 
 # pathways
-mm25_pathway_scores <- read_feather('/data/nih/fassoc/1.0/summary/pathway_scores.feather')
+mm25_pathway_scores <- read_feather(cfg$pathway_scores)
 
-mm25_pathways <- read_feather('/data/nih/fassoc/1.0/summary/pathway_pvals.feather') %>%
+mm25_pathways <- read_feather(cfg$pathway_pvals) %>%
   inner_join(mm25_pathway_scores, by = 'gene_set')
 
 # clean-up
 rm(mm25_gene_scores, mm25_pathway_scores)
 
 # individual dataset p-values
-mm25_gene_pvals <- read_feather('/data/nih/fassoc/1.0/summary/gene_pvals_indiv.feather')
-mm25_pathway_pvals <- read_feather('/data/nih/fassoc/1.0/summary/pathway_pvals_indiv.feather')
+mm25_gene_pvals <- read_feather(cfg$gene_pvals_indiv)
+mm25_pathway_pvals <- read_feather(cfg$pathway_pvals_indiv)
 
 mm25_gene_padjs <- mm25_gene_pvals %>%
     mutate_at(vars(-symbol), p.adjust, method = 'BH')
@@ -58,9 +60,10 @@ mm25_pathways <- mm25_pathways %>%
   add_column(pathway = msigdb_links, .before = 1)
 
 # load dataset configs
-cfg_infiles <- Sys.glob('~/d/r/nih/fassoc/datasets/*.yml')
+cfg_infiles <- Sys.glob(file.path(cfg$dataset_cfg_dir, '*.yml'))
 cfgs <- lapply(cfg_infiles, read_yaml)
-names(cfgs) <- toupper(sub('.yml', '', basename(cfg_infiles)))
+
+names(cfgs) <- sapply(cfgs, '[[', 'name')
 
 # load individual feature / phenotype datasets
 gene_infiles <- lapply(cfgs, function(x) { x$features$genes$rna })
@@ -75,12 +78,12 @@ names(gene_data) <- names(cfgs)
 pheno_data <- list()
 
 for (dataset in names(cfgs)) {
-  cfg <- cfgs[[dataset]]
+  dataset_cfg <- cfgs[[dataset]]
 
   pheno_data[[dataset]] <- list()
 
-  for (phenotype in names(cfg$phenotypes)) {
-    infile <- cfg$phenotypes[[phenotype]]$path
+  for (phenotype in names(dataset_cfg$phenotypes)) {
+    infile <- dataset_cfg$phenotypes[[phenotype]]$path
 
     if (endsWith(infile, 'tsv') || endsWith(infile, 'tsv.gz')) {
       pheno_data[[dataset]][[phenotype]] <- read_tsv(infile, col_types = cols())
@@ -139,25 +142,21 @@ server <- function(input, output, session) {
   })
 
   fgsea_summary_indiv <- reactive({
-    res <- read_tsv("/data/nih/fgsea/1.0-orig/results/summary/mm25_pvals_indiv_summary.tsv", 
-                    col_types = cols())
+    res <- read_tsv(cfg$fgsea_pvals_indiv, col_types = cols())
     res %>%
       arrange(desc(num_sig))
   })
 
   fgsea_summary_combined <- reactive({
-    pvals <- read_tsv("/data/nih/fgsea/1.0-orig/results/summary/mm25_pvals_combined_summary.tsv", 
-                      col_types = cols())
-
-    scores <- read_tsv("/data/nih/fgsea/1.0-orig/results/summary/mm25_combined_summary.tsv",
-                       col_types = cols())
+    pvals <- read_tsv(cfg$fgsea_pvals_combined, col_types = cols())
+    scores <- read_tsv(cfg$fgsea_scores_combined, col_types = cols())
 
     rbind(pvals, scores) %>%
       arrange(desc(num_sig))
   })
 
   fgsea_results_indiv <- reactive({
-    read_parquet("/data/nih/fgsea/1.0-orig/results/merged/mm25_pvals_indiv.parquet") %>%
+    read_parquet(cfg$fgsea_results_indiv) %>%
         select(-dataset) %>%
         filter(padj < 0.05) %>%
         arrange(padj)
@@ -272,17 +271,17 @@ server <- function(input, output, session) {
     }
 
     # config
-    cfg <- cfgs[[dataset]]$phenotypes[[mdat]]$associations[[covariate]]
+    assoc_cfg <- cfgs[[dataset]]$phenotypes[[mdat]]$associations[[covariate]]
 
-    if (cfg$method == 'survival') {
+    if (assoc_cfg$method == 'survival') {
       # survival data
       feature <- gene_data[[dataset]] %>%
         filter(symbol == input$select_gene) %>%
         select(-symbol) %>%
         as.numeric()
 
-      time_dat <- pull(pheno_data[[dataset]][[mdat]], cfg$params$time)
-      event_dat <- pull(pheno_data[[dataset]][[mdat]], cfg$params$event)
+      time_dat <- pull(pheno_data[[dataset]][[mdat]], assoc_cfg$params$time)
+      event_dat <- pull(pheno_data[[dataset]][[mdat]], assoc_cfg$params$event)
 
       dat <- data.frame(feature, time = time_dat, event = event_dat)
 
@@ -312,7 +311,7 @@ server <- function(input, output, session) {
         as.numeric()
 
       # pheno data
-      response <- pull(pheno_data[[dataset]][[mdat]], cfg$params$field)
+      response <- pull(pheno_data[[dataset]][[mdat]], assoc_cfg$params$field)
 
       dat <- data.frame(feature, response)
 
@@ -366,8 +365,9 @@ server <- function(input, output, session) {
     annots <- data.frame(type = factor(cov_labels))
 
     # generate covariate correlation matrix
+    # TODO; make -log10 transform optional..
     cor_method <- tolower(input$select_cov_similarity_cor_method)
-    cor_mat <- cor(dat[, -1], method = cor_method, use = 'pairwise.complete.obs')
+    cor_mat <- cor(-log10(pmax(dat[, -1], 1E-20)), method = cor_method, use = 'pairwise.complete.obs')
 
     # side bar colors
     pal <- color_pal[1:3]
