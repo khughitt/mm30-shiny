@@ -11,12 +11,14 @@ library(gridExtra)
 library(heatmaply)
 library(plotly)
 library(shinythemes)
+library(shinycssloaders)
 library(survival)
 library(survminer)
 library(tidyverse)
 library(yaml)
 
 options(stringsAsFactors = FALSE)
+options(spinner.color="#00bc8c")
 options(digits = 3)
 set.seed(1)
 
@@ -39,6 +41,7 @@ rm(mm25_gene_scores, mm25_pathway_scores)
 
 # individual dataset p-values
 mm25_gene_pvals <- read_feather('/data/nih/fassoc/1.0/summary/gene_pvals_indiv.feather')
+mm25_pathway_pvals <- read_feather('/data/nih/fassoc/1.0/summary/pathway_pvals_indiv.feather')
 
 mm25_gene_padjs <- mm25_gene_pvals %>%
     mutate_at(vars(-symbol), p.adjust, method = 'BH')
@@ -99,6 +102,14 @@ theme_dark <- dark_theme_gray() +
         panel.grid.major = element_line(color = "#555555", size = 0.2),
         panel.grid.minor = element_line(color = "#555555", size = 0.2))
 
+# heatmap theme
+heatmap_theme <- dark_theme_gray() +
+  theme(plot.background = element_rect(fill = "#222222"),
+        panel.background = element_rect(fill = "#222222"),
+        panel.border = element_rect(colour = "#333333", fill = NA, size = 1),
+        legend.background = element_rect(fill = "#222222"),
+        axis.text.x = element_text(angle = 90),
+        axis.line = element_line(color = "white"))
 
 # plot colors
 color_pal <- c('#36c764', '#c73699', '#3650c7', '#c7ac36', '#c7365f', '#bb36c7')
@@ -331,30 +342,47 @@ server <- function(input, output, session) {
     }
   })
 
-  output$covariate_similarity <- renderPlotly({
-    # determine covariate functional groups from labels
+  output$cov_similarity_heatmap <- renderPlotly({
+    req(input$select_cov_similarity_feat_type)
+    req(input$select_cov_similarity_cor_method)
 
-    cnames <- colnames(mm25_gene_pvals)[-1]
+    # determine dataset to use
+    if (input$select_cov_similarity_feat_type == 'Genes') {
+      dat <- mm25_gene_pvals
+    } else {
+      dat <- mm25_pathway_pvals
+    }
 
-    cov_labels <- rep("", ncol(mm25_gene_pvals) - 1)
+    # determine covariate functional groups from labels;
+    # TODO: load dataset metadata table including groups and use that instead
+    cnames <- colnames(dat)[-1]
+
+    cov_labels <- rep("", ncol(dat) - 1)
 
     cov_labels[grepl('survival|died', cnames)] <- 'survival'
     cov_labels[grepl('treatment|response', cnames)] <- 'treatment'
     cov_labels[grepl('status|stage|ecog|pfs_event|relapsed', cnames)] <- 'stage'
 
-    cov_labels <- factor(cov_labels)
-
-    annots <- data.frame(type = cov_labels)
-    ann_colors <- list(type = c('#799d15', '#15799e', '#9e1579'))
+    annots <- data.frame(type = factor(cov_labels))
 
     # generate covariate correlation matrix
-    cor_mat <- cor(mm25_gene_pvals[, -1], method = 'pearson', 
-                   use = 'pairwise.complete.obs')
+    cor_method <- tolower(input$select_cov_similarity_cor_method)
+    cor_mat <- cor(dat[, -1], method = cor_method, use = 'pairwise.complete.obs')
 
+    # side bar colors
     pal <- color_pal[1:3]
     names(pal) <- c('survival', 'treatment', 'stage')
 
-    heatmaply(cor_mat, row_side_colors = annots, row_side_palette = pal)
+    # render heatmap
+    heatmaply(cor_mat, row_side_colors = annots, row_side_palette = pal,
+              heatmap_layers = heatmap_theme,
+              dendrogram_layers = list(
+                scale_color_manual(values = c('#b2b2b2', '#b2b2b2')),
+                heatmap_theme,
+                theme(panel.grid.major = element_blank(),
+                panel.grid.minor = element_blank())
+              ),
+              side_color_layers = heatmap_theme)
   })
 
   output$gene_pval_dists <- renderPlot({
@@ -410,33 +438,33 @@ ui <- function(request) {
       includeCSS("resources/styles.css"),
       includeCSS("https://fonts.googleapis.com/css?family=Roboto+Mono&display=swap"),
       tags$style(
-        HTML("#title { font-family: 'Roboto Mono', monospace; }")
+        HTML(".navbar-brand { font-family: 'Roboto Mono', monospace; }")
       )
     ),
 
     navbarPage(
       id = "main",
       theme = shinytheme("darkly"),
-      title = "MM25",
-      windowTitle = "MM25",
+      title = "MM25 (v1.0)",
+      windowTitle = "MM25 (v1.0)",
 
       navbarMenu(
         "Genes",
         tabPanel(
           "Rankings",
-          dataTableOutput('mm25_genes')
+          withSpinner(dataTableOutput('mm25_genes'))
         ),
         tabPanel(
           "Visualize",
           fluidRow(
             column(
-              width = 3,
+              width = 2,
               selectizeInput('select_gene', "Gene:", choices = NULL),
               uiOutput('select_covariate')
             ),
             column(
-              width = 9,
-              plotOutput('gene_plot', height = '960px')
+              width = 10,
+              withSpinner(plotOutput('gene_plot', height = '960px'))
             )
           )
         )
@@ -445,7 +473,7 @@ ui <- function(request) {
         "Pathways",
         tabPanel(
           "Ranking",
-          dataTableOutput('mm25_pathways')
+          withSpinner(dataTableOutput('mm25_pathways'))
         )
       ),
       navbarMenu(
@@ -454,25 +482,35 @@ ui <- function(request) {
           "P-value Distributions",
           selectInput('select_gene_pval_dist_type', "P-value type:", 
                       choices = c("Adjusted (BH)", "Unadjusted"), selected = "Unadjusted"),
-          plotOutput('gene_pval_dists', height = '4000px')
+          withSpinner(plotOutput('gene_pval_dists', height = '4000px'))
         ),
         tabPanel(
           "Covariate Similarity",
-          plotlyOutput('covariate_similarity', height = '800px')
+          column(
+            width = 3,
+            selectInput('select_cov_similarity_feat_type', "Feature type:",
+                        choices = c("Genes", "Pathways"), selected = "Genes"),
+            selectInput('select_cov_similarity_cor_method', "Correlation type:",
+                        choices = c("Pearson", "Spearman"), selected = "Pearson")
+          ),
+          column(
+            width = 9,
+            withSpinner(plotlyOutput('cov_similarity_heatmap', height = '800px'))
+          )
+        ),
+        tabPanel(
+          "Functional Enrichment",
+          #selectInput("select_fgsea_covariate", "Covariate:", choices = covariate_ids),
+          uiOutput("fgsea_select_covariate"),
+          withSpinner(dataTableOutput("fgsea_results_indiv"))
         )
       ),
       navbarMenu(
         "Functional Enrichment",
         tabPanel(
-          "Covariates",
-          #selectInput("select_fgsea_covariate", "Covariate:", choices = covariate_ids),
-          uiOutput("fgsea_select_covariate"),
-          dataTableOutput("fgsea_results_indiv")
-        ),
-        tabPanel(
           "Summary",
           selectInput("select_fgsea_summary", "Display: ", choices = c('Covariates', 'Ranking Methods')),
-          dataTableOutput("fgsea_summary_output")
+          withSpinner(dataTableOutput("fgsea_summary_output"))
         )
       )
     )
