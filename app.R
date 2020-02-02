@@ -22,7 +22,27 @@ options(spinner.color="#00bc8c")
 options(digits = 3)
 set.seed(1)
 
+# load config
 cfg <- read_yaml("config/config-1.0.yml")
+
+# load dataset and covariate metadata
+dataset_metadata <- read_tsv(cfg$dataset_metadata)
+covariate_metadata <- read_feather(cfg$covariate_metadata)
+
+# work-around: manually add MMRF to dataset metadata
+dataset_metadata <- rbind(dataset_metadata,
+  c('MMRF', 'MMRF CoMMpass Study IA14', NA, NA, NA, NA, NA, "GPL11154", NA,
+    "https://research.themmrf.org/", "", ""))
+
+dataset_metadata <- dataset_metadata %>%
+  rename(dataset = geo_id)
+
+covariate_metadata <- covariate_metadata %>%
+  inner_join(dataset_metadata, by = 'dataset')
+
+covariate_metadata$category <- factor(covariate_metadata$category)
+
+rm(dataset_metadata)
 
 # load MM25 combined scores / pvals
 
@@ -354,27 +374,32 @@ server <- function(input, output, session) {
 
     # determine covariate functional groups from labels;
     # TODO: load dataset metadata table including groups and use that instead
-    cnames <- colnames(dat)[-1]
+    cnames <- sub('_pval', '', colnames(dat)[-1])
 
-    cov_labels <- rep("", ncol(dat) - 1)
+    dataset_ids <- paste(covariate_metadata$dataset, 
+                         covariate_metadata$covariate, sep='_')
+    cov_categories <- covariate_metadata$category[match(cnames, dataset_ids)]
+    annot_row <- data.frame(type = factor(cov_categories))
 
-    cov_labels[grepl('survival|died', cnames)] <- 'survival'
-    cov_labels[grepl('treatment|response', cnames)] <- 'treatment'
-    cov_labels[grepl('status|stage|ecog|pfs_event|relapsed', cnames)] <- 'stage'
+    # cov_categories <- rep("", ncol(dat) - 1)
+    # cov_categories[grepl('survival|died', cnames)] <- 'survival'
+    # cov_categories[grepl('treatment|response', cnames)] <- 'treatment'
+    # cov_categories[grepl('status|stage|ecog|pfs_event|relapsed', cnames)] <- 'stage'
 
-    annots <- data.frame(type = factor(cov_labels))
+    # cov_methods <- covariate_metadata$method[match(cnames, dataset_ids)]
+    # annot_col <- data.frame(method = factor(cov_methods))
 
     # generate covariate correlation matrix
     # TODO; make -log10 transform optional..
     cor_method <- tolower(input$select_cov_similarity_cor_method)
     cor_mat <- cor(-log10(pmax(dat[, -1], 1E-20)), method = cor_method, use = 'pairwise.complete.obs')
 
-    # side bar colors
-    pal <- color_pal[1:3]
-    names(pal) <- c('survival', 'treatment', 'stage')
+    # row annotations
+    row_pal <- color_pal[1:3]
+    names(row_pal) <- c('survival', 'treatment', 'disease_stage')
 
     # render heatmap
-    heatmaply(cor_mat, row_side_colors = annots, row_side_palette = pal,
+    heatmaply(cor_mat, row_side_colors = annot_row, row_side_palette = row_pal,
               heatmap_layers = heatmap_theme,
               dendrogram_layers = list(
                 scale_color_manual(values = c('#b2b2b2', '#b2b2b2')),
@@ -413,7 +438,6 @@ server <- function(input, output, session) {
     dat$method <- 'Logit'
     dat$method[grepl('survival', dat$covariate)] <- 'Survival'
     dat$method <- factor(dat$method)
-
 
     npages <- ceiling((ncol(mm25_gene_pvals) - 1) / 9)
 
