@@ -26,7 +26,7 @@ set.seed(1)
 cfg <- read_yaml("config/config-1.0.yml")
 
 # load dataset and covariate metadata
-dataset_metadata <- read_tsv(cfg$dataset_metadata)
+dataset_metadata <- read_tsv(cfg$dataset_metadata, col_types = cols())
 covariate_metadata <- read_feather(cfg$covariate_metadata)
 
 # work-around: manually add MMRF to dataset metadata
@@ -69,12 +69,12 @@ mm25_gene_padjs <- mm25_gene_pvals %>%
     mutate_at(vars(-symbol), p.adjust, method = 'BH')
 
 # list of covariates
-covariate_ids <- colnames(mm25_gene_pvals)[-1]  
+covariate_ids <- colnames(mm25_gene_pvals)[-1]
 
 # add links to msigdb pathway info pages
-msigdb_ids <- sub("[^_]*_", "", mm25_pathways$gene_set) 
+msigdb_ids <- sub("[^_]*_", "", mm25_pathways$gene_set)
 
-msigdb_links <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>", 
+msigdb_links <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>",
                         msigdb_ids, mm25_pathways$gene_set)
 mm25_pathways <- mm25_pathways %>%
   add_column(pathway = msigdb_links, .before = 1)
@@ -113,13 +113,21 @@ for (dataset in names(cfgs)) {
   }
 }
 
+# get # sample in processed expression data
+num_genes   <- lapply(gene_data, nrow)
+num_samples <- lapply(gene_data, ncol)
+
+covariate_metadata$num_genes   <- as.numeric(num_genes[covariate_metadata$dataset])
+covariate_metadata$num_samples <- as.numeric(num_samples[covariate_metadata$dataset])
+
 # columns to round
 float_cols <- colnames(mm25_genes)[!colnames(mm25_genes) %in%
                                    c('symbol', 'num_present', 'num_missing')]
 
 # ggplot theme
-theme_dark <- dark_theme_gray() +
+theme_dark <- dark_theme_gray(base_size = 18) +
   theme(axis.text.x = element_text(angle = 90),
+        legend.background = element_rect(fill = NA),
         plot.background = element_rect(fill = "#222222"),
         panel.border = element_rect(colour = "#333333", fill = NA, size = 1),
         panel.grid.major = element_line(color = "#555555", size = 0.2),
@@ -161,6 +169,18 @@ server <- function(input, output, session) {
       arrange(pval)
   })
 
+  selected_covariate_metadata <- reactive({
+    req(input$select_covariate)
+
+    # determine selected dataset / covariate
+    dataset_id <- unlist(str_split(input$select_covariate, '_'))[1]
+    covariate_id <- sub('_pval', '', sub(paste0(dataset_id, '_'), '', input$select_covariate))
+
+    # retrieve relevant metadata
+    covariate_metadata %>%
+      filter(dataset ==  dataset_id & covariate == covariate_id)
+  })
+
   fgsea_summary_indiv <- reactive({
     res <- read_tsv(cfg$fgsea_pvals_indiv, col_types = cols())
     res %>%
@@ -182,6 +202,20 @@ server <- function(input, output, session) {
         arrange(padj)
   })
 
+  fgsea_results_combined <- reactive({
+    pvals <- read_parquet(cfg$fgsea_results_pvals) %>%
+      select(-dataset) %>%
+      filter(padj < 0.05) %>%
+      arrange(padj)
+
+    scores <- read_parquet(cfg$fgsea_results_scores) %>%
+      select(-dataset) %>%
+      filter(padj < 0.05) %>%
+      arrange(padj)
+
+    rbind(pvals, scores)
+  })
+
   fgsea_results_indiv_filtered <- reactive({
     req(input$select_fgsea_covariate)
 
@@ -189,10 +223,61 @@ server <- function(input, output, session) {
         filter(field == input$select_fgsea_covariate) %>%
         select(-field)
 
-    dat$pathway <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>", 
+    dat$pathway <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>",
                             dat$pathway, dat$pathway)
 
     dat
+  })
+
+  fgsea_results_combined_filtered <- reactive({
+    req(input$select_fgsea_ranking)
+
+    dat <- fgsea_results_combined() %>%
+        filter(field == input$select_fgsea_ranking) %>%
+        select(-field)
+
+    dat$pathway <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>",
+                            dat$pathway, dat$pathway)
+
+    dat
+  })
+
+  #
+  # HTML output
+  #
+  output$covariate_summary <- renderUI({
+    mdat <- selected_covariate_metadata()
+
+    tag_list <- tagList(
+      tags$b(mdat$title),
+      br(),
+      tags$b(tags$a(href=mdat$url, target='_blank', mdat$dataset)),
+      br()
+    )
+
+    if (!is.na(mdat$name)) {
+      authors <- str_to_title(str_match(mdat$name, '[[:alpha:]]+'))
+      year <- str_split(mdat$submission_date, ' ', simplify = TRUE)[, 3]
+
+      attribution <- sprintf("%s (%s)", authors, year)
+      tag_list <- tagAppendChildren(tag_list, attribution, br())
+    }
+
+    tag_list <- tagAppendChildren(
+      tag_list,
+      "# Samples:",
+      tags$b(mdat$num_samples),
+      br(),
+      "# Genes:",
+      tags$b(mdat$num_genes),
+      br()
+    )
+
+    if (!is.na(mdat$overall_design)) {
+      tag_list <- tagAppendChildren(tag_list, hr(), tags$b("Overall Design:"), br(), mdat$abstract, br())
+    }
+
+    tags$div(tag_list)
   })
 
   #
@@ -215,7 +300,7 @@ server <- function(input, output, session) {
 
   output$fgsea_select_covariate <- renderUI({
     fgsea_summary <- fgsea_summary_indiv()
-    
+
     opts <- covariate_ids
 
     num_sig <- fgsea_summary$num_sig[match(opts, fgsea_summary$field)]
@@ -229,10 +314,24 @@ server <- function(input, output, session) {
     selectInput("select_fgsea_covariate", "Covariate:", choices = opts)
   })
 
-  updateSelectizeInput(session, 'select_gene', 
+  output$fgsea_select_ranking <- renderUI({
+    fgsea_summary <- fgsea_summary_combined()
+
+    opts <- fgsea_summary$field
+
+    # include number of significant terms in labels
+    names(opts) <- sprintf("%s (#sig: %d)", opts, fgsea_summary$num_sig)
+
+    # order labels in decreasing order of functional enrichment
+    # opts <- opts[match(fgsea_summary$field, opts)]
+
+    selectInput("select_fgsea_ranking", "Ranking:", choices = opts)
+  })
+
+  updateSelectizeInput(session, 'select_gene',
                        choices = as.character(mm25_genes$symbol), server = TRUE)
 
-  # 
+  #
   # Tables
   #
   output$mm25_genes <- renderDataTable({
@@ -240,13 +339,19 @@ server <- function(input, output, session) {
       formatRound(columns = float_cols, digits = 5)
   })
   output$mm25_pathways <- renderDataTable({
-    DT::datatable(mm25_pathways %>% select(-gene_set), 
+    DT::datatable(mm25_pathways %>% select(-gene_set),
                   style = 'bootstrap', escape = FALSE, options = list(pageLength = 15)) %>%
       formatRound(columns = float_cols, digits = 5)
   })
 
   output$fgsea_results_indiv <- renderDataTable({
-    DT::datatable(fgsea_results_indiv_filtered(), 
+    DT::datatable(fgsea_results_indiv_filtered(),
+                  style = 'bootstrap', escape = FALSE, options = list(pageLength = 15)) %>%
+        formatRound(columns = c('pval', 'padj', 'ES', 'NES'), digits = 5)
+  })
+
+  output$fgsea_results_combined <- renderDataTable({
+    DT::datatable(fgsea_results_combined_filtered(),
                   style = 'bootstrap', escape = FALSE, options = list(pageLength = 15)) %>%
         formatRound(columns = c('pval', 'padj', 'ES', 'NES'), digits = 5)
   })
@@ -282,7 +387,7 @@ server <- function(input, output, session) {
       if (grepl('response', covariate)) {
         mdat <- 'treatment'
       } else if (grepl('survival', covariate)) {
-        mdat <- 'survival' 
+        mdat <- 'survival'
       } else {
         mdat <- 'clinical'
       }
@@ -318,11 +423,16 @@ server <- function(input, output, session) {
 
       dat$Expression <- factor(dat$Expression)
 
+      cov_label <- str_to_title(gsub('_', ' ', covariate))
+      plt_title <- sprintf("%s: %s vs. %s", dataset, cov_label, input$select_gene)
+
       # perform fit on binarized data
       fit <- survfit(Surv(time, event) ~ Expression, data = dat)
 
       # display a kaplan meier plot for result
-      ggsurvplot(fit, data = dat, ggtheme = theme_dark, palette = color_pal)
+      ggsurvplot(fit, data = dat, ggtheme = theme_dark, palette = color_pal,
+                 title = plt_title,
+                 legend = 'bottom', legend.title = 'Legend')
     } else {
       # logistic regression fit plot
       feature <- gene_data[[dataset]] %>%
@@ -340,24 +450,25 @@ server <- function(input, output, session) {
       # drop any entries with missing values
       dat <- dat[!is.na(dat$response), ]
 
-      # draw violin + jitter plot 
+      # draw violin + jitter plot
       set.seed(1)
 
       ggplot(dat, aes(x = response, y = feature)) +
-        # geom_boxplot(aes(fill = response, color = response), alpha = 0.7, outlier.shape = NA) +
-        geom_violin(aes(fill = response, color = response), alpha = 0.8, draw_quantiles = c(0.5)) +
-        geom_jitter(aes(color = response), alpha = 0.9) +
+        # geom_boxplot(aes(fill = response, color = response), outlier.shape = NA) +
+        geom_violin(aes(fill = response, color = response), alpha = 0.5, draw_quantiles = c(0.5)) +
+        geom_jitter(aes(color = response), alpha = 0.8) +
         scale_fill_manual(values = color_pal) +
         scale_color_manual(values = color_pal) +
         ggtitle(sprintf("%s: %s vs. %s", dataset, input$select_gene, covariate)) +
         xlab(covariate) +
         ylab(sprintf("%s expression", input$select_gene)) +
-        dark_theme_gray() +
-        theme(axis.text.x = element_text(angle = 90),
-              plot.background = element_rect(fill = "#222222"),
-              panel.border = element_rect(colour = "#333333", fill = NA, size = 1),
-              panel.grid.major = element_line(color = "#555555", size = 0.2),
-              panel.grid.minor = element_line(color = "#555555", size = 0.2))
+        theme_dark
+        # dark_theme_gray(base_size = 18) +
+        # theme(axis.text.x = element_text(angle = 90),
+        #       plot.background = element_rect(fill = "#222222"),
+        #       panel.border = element_rect(colour = "#333333", fill = NA, size = 1),
+        #       panel.grid.major = element_line(color = "#555555", size = 0.2),
+        #       panel.grid.minor = element_line(color = "#555555", size = 0.2))
     }
   })
 
@@ -376,7 +487,7 @@ server <- function(input, output, session) {
     # TODO: load dataset metadata table including groups and use that instead
     cnames <- sub('_pval', '', colnames(dat)[-1])
 
-    dataset_ids <- paste(covariate_metadata$dataset, 
+    dataset_ids <- paste(covariate_metadata$dataset,
                          covariate_metadata$covariate, sep='_')
     cov_categories <- covariate_metadata$category[match(cnames, dataset_ids)]
     annot_row <- data.frame(type = factor(cov_categories))
@@ -482,13 +593,18 @@ ui <- function(request) {
           "Visualize",
           fluidRow(
             column(
-              width = 2,
+              width = 4,
               selectizeInput('select_gene', "Gene:", choices = NULL),
-              uiOutput('select_covariate')
+              helpText("Gene to visualize."),
+              hr(),
+              uiOutput('select_covariate'),
+              helpText("Phenotype / covariate to compare gene expression or SNP counts against."),
+              hr(),
+              uiOutput('covariate_summary')
             ),
             column(
-              width = 10,
-              withSpinner(plotOutput('gene_plot', height = '960px'))
+              width = 8,
+              withSpinner(plotOutput('gene_plot', height = '800px'))
             )
           )
         )
@@ -504,7 +620,7 @@ ui <- function(request) {
         "Covariates",
         tabPanel(
           "P-value Distributions",
-          selectInput('select_gene_pval_dist_type', "P-value type:", 
+          selectInput('select_gene_pval_dist_type', "P-value type:",
                       choices = c("Adjusted (BH)", "Unadjusted"), selected = "Unadjusted"),
           withSpinner(plotOutput('gene_pval_dists', height = '4000px'))
         ),
@@ -521,16 +637,21 @@ ui <- function(request) {
             width = 9,
             withSpinner(plotlyOutput('cov_similarity_heatmap', height = '800px'))
           )
-        ),
-        tabPanel(
-          "Functional Enrichment",
-          #selectInput("select_fgsea_covariate", "Covariate:", choices = covariate_ids),
-          uiOutput("fgsea_select_covariate"),
-          withSpinner(dataTableOutput("fgsea_results_indiv"))
         )
       ),
       navbarMenu(
         "Functional Enrichment",
+        tabPanel(
+          "Phenotypes",
+          #selectInput("select_fgsea_covariate", "Covariate:", choices = covariate_ids),
+          uiOutput("fgsea_select_covariate"),
+          withSpinner(dataTableOutput("fgsea_results_indiv"))
+        ),
+        tabPanel(
+          "MM25 Rankings",
+          uiOutput("fgsea_select_ranking"),
+          withSpinner(dataTableOutput("fgsea_results_combined"))
+        ),
         tabPanel(
           "Summary",
           selectInput("select_fgsea_summary", "Display: ", choices = c('Covariates', 'Ranking Methods')),
