@@ -23,13 +23,15 @@ options(digits = 3)
 set.seed(1)
 
 # ggplot theme
-theme_dark <- dark_theme_gray(base_size = 18) +
-  theme(axis.text.x = element_text(angle = 90),
-        legend.background = element_rect(fill = NA),
-        plot.background = element_rect(fill = "#222222"),
-        panel.border = element_rect(colour = "#333333", fill = NA, size = 1),
-        panel.grid.major = element_line(color = "#555555", size = 0.2),
-        panel.grid.minor = element_line(color = "#555555", size = 0.2))
+theme_dark <- function(base_font_size = 18) {
+  dark_theme_gray(base_size = base_font_size) +
+    theme(axis.text.x = element_text(angle = 90),
+          legend.background = element_rect(fill = NA),
+          plot.background = element_rect(fill = "#222222"),
+          panel.border = element_rect(colour = "#333333", fill = NA, size = 1),
+          panel.grid.major = element_line(color = "#555555", size = 0.2),
+          panel.grid.minor = element_line(color = "#555555", size = 0.2))
+}
 
 # heatmap theme
 heatmap_theme <- dark_theme_gray() +
@@ -427,7 +429,7 @@ server <- function(input, output, session) {
         formatRound(columns = c('pval', 'padj', 'ES', 'NES'), digits = 5)
   })
 
-  output$fgsea_summary_output <- renderDataTable({
+  output$fgsea_summary_table <- renderDataTable({
     req(input$select_fgsea_summary)
 
     if (input$select_fgsea_summary == "Covariates") {
@@ -488,7 +490,7 @@ server <- function(input, output, session) {
       fit <- survfit(Surv(time, event) ~ Expression, data = dat)
 
       # display a kaplan meier plot for result
-      ggsurvplot(fit, data = dat, ggtheme = theme_dark, palette = color_pal,
+      ggsurvplot(fit, data = dat, ggtheme = theme_dark(), palette = color_pal,
                  title = plt_title,
                  legend = 'bottom', legend.title = 'Legend')
     } else {
@@ -520,7 +522,7 @@ server <- function(input, output, session) {
         ggtitle(sprintf("%s: %s vs. %s", dataset, input$select_gene, covariate)) +
         xlab(covariate) +
         ylab(sprintf("%s expression", input$select_gene)) +
-        theme_dark
+        theme_dark()
         # dark_theme_gray(base_size = 18) +
         # theme(axis.text.x = element_text(angle = 90),
         #       plot.background = element_rect(fill = "#222222"),
@@ -618,10 +620,33 @@ server <- function(input, output, session) {
         facet_wrap_paginate(~label, ncol = 3, nrow = 3, scales = 'free_y', page = i) +
         scale_fill_manual(values = color_pal) +
         scale_color_manual(values = color_pal) +
-        theme_dark
+        theme_dark()
     }
 
     print(grid.arrange(grobs = plts, ncol = 1))
+  })
+
+  output$fgsea_summary_plot <- renderPlotly({
+    # retrieve indiv and combined fgsea results
+    dat <- rbind(cbind(fgsea_summary_indiv(), type = 'individual'),
+                 cbind(fgsea_summary_combined(), type = 'combined'))
+
+    dat$type <- factor(dat$type)
+
+    sorted_fields <- dat %>%
+      arrange(num_sig) %>%
+      pull(field)
+
+    # display in order of increasing significance
+    dat$field <- factor(dat$field, levels = sorted_fields)
+
+    # scale_color_manual(values = color_pal) +
+    ggplot(dat, aes(x = field, y = num_sig, fill = type)) +
+      geom_bar(stat = "identity") +
+      scale_fill_manual(values = color_pal) +
+      xlab("Gene Ranking") +
+      ylab("# Significant GSEA terms") +
+      theme_dark(14)
   })
 }
 
@@ -717,7 +742,16 @@ ui <- function(request) {
           "Summary",
           selectInput("select_fgsea_summary", "Display: ", 
                       choices = c('Covariates', 'Ranking Methods')),
-          withSpinner(dataTableOutput("fgsea_summary_output"))
+          fluidRow(
+            column(
+              width = 6,
+              withSpinner(dataTableOutput("fgsea_summary_table"))
+            ),
+            column(
+              width = 6,
+              withSpinner(plotlyOutput("fgsea_summary_plot", height = '800px'))
+            )
+          )
         )
       ),
       tabPanel(
