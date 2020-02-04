@@ -60,10 +60,10 @@ server <- function(input, output, session) {
   })
 
   # load dataset and covariate metadata
-  covariate_metadata <- reactive({
+  phenotype_metadata <- reactive({
     dataset_metadata <- read_tsv(cfg()$dataset_metadata, col_types = cols())
 
-    dat <- read_feather(cfg()$covariate_metadata)
+    dat <- read_feather(cfg()$phenotype_metadata)
 
     # work-around: manually add MMRF to dataset metadata
     dataset_metadata <- rbind(dataset_metadata,
@@ -93,15 +93,15 @@ server <- function(input, output, session) {
   # genes
   # mm25_gene_scores <- read_feather(cfg()$gene_scores)
 
-  mm25_genes <- reactive({
-    read_feather(cfg()$gene_pvals)
+  mm25_gene_pvals_combined <- reactive({
+    read_feather(cfg()$gene_pvals_combined)
   })
 
   # pathways
   # mm25_pathway_scores <- read_feather(cfg()$pathway_scores)
 
-  mm25_pathways <- reactive({
-    dat <- read_feather(cfg()$pathway_pvals)
+  mm25_pathway_pvals_combined <- reactive({
+    dat <- read_feather(cfg()$pathway_pvals_combined)
 
     # add links to msigdb pathway info pages
     msigdb_ids <- sub("[^_]*_", "", dat$gene_set)
@@ -183,8 +183,6 @@ server <- function(input, output, session) {
     dat
   })
 
-################################################
-
   gene_pvals <- reactive({
     req(input$select_gene)
 
@@ -200,7 +198,7 @@ server <- function(input, output, session) {
       arrange(pval)
   })
 
-  selected_covariate_metadata <- reactive({
+  selected_phenotype_metadata <- reactive({
     req(input$select_covariate)
 
     # determine selected dataset / covariate
@@ -208,70 +206,62 @@ server <- function(input, output, session) {
     covariate_id <- sub('_pval', '', sub(paste0(dataset_id, '_'), '', input$select_covariate))
 
     # retrieve relevant metadata
-    covariate_metadata() %>%
+    phenotype_metadata() %>%
       filter(dataset ==  dataset_id & phenotype == covariate_id)
   })
 
-  # fgsea_summary_indiv <- reactive({
-  #   res <- read_tsv(cfg()$fgsea_pvals_indiv, col_types = cols())
-  #   res %>%
-  #     arrange(desc(num_sig))
-  # })
   #
-  # fgsea_summary_combined <- reactive({
-  #   pvals <- read_tsv(cfg()$fgsea_pvals_combined, col_types = cols())
-  #   scores <- read_tsv(cfg()$fgsea_scores_combined, col_types = cols())
+  # reactives - fgsea 
   #
-  #   rbind(pvals, scores) %>%
-  #     arrange(desc(num_sig))
-  # })
-  #
-  # fgsea_results_indiv <- reactive({
-  #   read_parquet(cfg()$fgsea_results_indiv) %>%
-  #       select(-dataset) %>%
-  #       filter(padj < 0.05) %>%
-  #       arrange(padj)
-  # })
-  #
-  # fgsea_results_combined <- reactive({
-  #   pvals <- read_parquet(cfg()$fgsea_results_pvals) %>%
-  #     select(-dataset) %>%
-  #     filter(padj < 0.05) %>%
-  #     arrange(padj)
-  #
-  #   scores <- read_parquet(cfg()$fgsea_results_scores) %>%
-  #     select(-dataset) %>%
-  #     filter(padj < 0.05) %>%
-  #     arrange(padj)
-  #
-  #   rbind(pvals, scores)
-  # })
-  #
-  # fgsea_results_indiv_filtered <- reactive({
-  #   req(input$select_fgsea_covariate)
-  #
-  #   dat <- fgsea_results_indiv() %>%
-  #       filter(field == input$select_fgsea_covariate) %>%
-  #       select(-field)
-  #
-  #   dat$pathway <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>",
-  #                           dat$pathway, dat$pathway)
-  #
-  #   dat
-  # })
-  #
-  # fgsea_results_combined_filtered <- reactive({
-  #   req(input$select_fgsea_ranking)
-  #
-  #   dat <- fgsea_results_combined() %>%
-  #       filter(field == input$select_fgsea_ranking) %>%
-  #       select(-field)
-  #
-  #   dat$pathway <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>",
-  #                           dat$pathway, dat$pathway)
-  #
-  #   dat
-  # })
+  fgsea_summary_indiv <- reactive({
+    read_tsv(cfg()$fgsea_summary_indiv, col_types = cols()) %>%
+      arrange(desc(num_sig))
+  })
+
+  fgsea_summary_combined <- reactive({
+    read_tsv(cfg()$fgsea_summary_combined, col_types = cols()) %>%
+      arrange(desc(num_sig))
+  })
+
+  fgsea_results_indiv <- reactive({
+    read_parquet(cfg()$fgsea_results_indiv) %>%
+        select(-dataset) %>%
+        filter(padj < 0.05) %>%
+        arrange(padj)
+  })
+
+  fgsea_results_combined <- reactive({
+    read_parquet(cfg()$fgsea_results_combined) %>%
+      select(-dataset) %>%
+      filter(padj < 0.05) %>%
+      arrange(padj)
+  })
+
+  fgsea_results_indiv_filtered <- reactive({
+    req(input$select_fgsea_covariate)
+
+    dat <- fgsea_results_indiv() %>%
+        filter(field == input$select_fgsea_covariate) %>%
+        select(-field)
+
+    dat$pathway <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>",
+                            dat$pathway, dat$pathway)
+
+    dat
+  })
+
+  fgsea_results_combined_filtered <- reactive({
+    req(input$select_fgsea_ranking)
+
+    dat <- fgsea_results_combined() %>%
+        filter(field == input$select_fgsea_ranking) %>%
+        select(-field)
+
+    dat$pathway <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>",
+                            dat$pathway, dat$pathway)
+
+    dat
+  })
 
   #
   # Text output
@@ -285,7 +275,7 @@ server <- function(input, output, session) {
   # HTML output
   #
   output$covariate_summary <- renderUI({
-    pheno_mdata <- selected_covariate_metadata()
+    pheno_mdata <- selected_phenotype_metadata()
 
     tag_list <- tagList(
       tags$b(pheno_mdata$title),
@@ -339,50 +329,50 @@ server <- function(input, output, session) {
     selectInput('select_covariate', "Covariate:", choices = opts)
   })
 
-  # output$fgsea_select_covariate <- renderUI({
-  #   fgsea_summary <- fgsea_summary_indiv()
-  #
-  #   opts <- covariate_ids()
-  #
-  #   num_sig <- fgsea_summary$num_sig[match(opts, fgsea_summary$field)]
-  #
-  #   # include number of significant terms in labels
-  #   names(opts) <- sprintf("%s (#sig: %d)", opts, num_sig)
-  #
-  #   # order labels in decreasing order of functional enrichment
-  #   opts <- opts[match(fgsea_summary$field, opts)]
-  #
-  #   selectInput("select_fgsea_covariate", "Covariate:", choices = opts)
-  # })
-  #
-  # output$fgsea_select_ranking <- renderUI({
-  #   fgsea_summary <- fgsea_summary_combined()
-  #
-  #   opts <- fgsea_summary$field
-  #
-  #   # include number of significant terms in labels
-  #   names(opts) <- sprintf("%s (#sig: %d)", opts, fgsea_summary$num_sig)
-  #
-  #   # order labels in decreasing order of functional enrichment
-  #   # opts <- opts[match(fgsea_summary$field, opts)]
-  #
-  #   selectInput("select_fgsea_ranking", "Ranking:", choices = opts)
-  # })
+  output$fgsea_select_covariate <- renderUI({
+    fgsea_summary <- fgsea_summary_indiv()
+
+    opts <- covariate_ids()
+
+    num_sig <- fgsea_summary$num_sig[match(opts, fgsea_summary$field)]
+
+    # include number of significant terms in labels
+    names(opts) <- sprintf("%s (#sig: %d)", opts, num_sig)
+
+    # order labels in decreasing order of functional enrichment
+    opts <- opts[match(fgsea_summary$field, opts)]
+
+    selectInput("select_fgsea_covariate", "Covariate:", choices = opts)
+  })
+
+  output$fgsea_select_ranking <- renderUI({
+    fgsea_summary <- fgsea_summary_combined()
+
+    opts <- fgsea_summary$field
+
+    # include number of significant terms in labels
+    names(opts) <- sprintf("%s (#sig: %d)", opts, fgsea_summary$num_sig)
+
+    # order labels in decreasing order of functional enrichment
+    # opts <- opts[match(fgsea_summary$field, opts)]
+
+    selectInput("select_fgsea_ranking", "Ranking:", choices = opts)
+  })
 
   observeEvent(input$select_version, {
     updateSelectizeInput(session, 'select_gene',
-                         choices = as.character(mm25_genes()$symbol), server = TRUE)
+                         choices = as.character(mm25_gene_pvals_combined()$symbol), server = TRUE)
   })
 
   #
   # Tables
   #
-  output$mm25_genes <- renderDataTable({
+  output$mm25_gene_pvals_combined <- renderDataTable({
     req(input$select_gene_table_format)
 
     float_cols <- paste0(c('mean', 'median', 'min', 'sumlog', 'sumz'), '_pval')
 
-    dat <- mm25_genes()
+    dat <- mm25_gene_pvals_combined()
 
     # convert to ranks, if requested
     if (input$select_gene_table_format == 'Ranks') {
@@ -400,12 +390,12 @@ server <- function(input, output, session) {
 
     out
   })
-  output$mm25_pathways <- renderDataTable({
+  output$mm25_pathway_pvals_combined <- renderDataTable({
     req(input$select_pathway_table_format)
 
     float_cols <- paste0(c('mean', 'median', 'min', 'sumlog', 'sumz'), '_pval')
 
-    dat <- mm25_pathways()
+    dat <- mm25_pathway_pvals_combined()
 
     # convert to ranks, if requested
     if (input$select_pathway_table_format == 'Ranks') {
@@ -555,9 +545,9 @@ server <- function(input, output, session) {
     # TODO: load dataset metadata table including groups and use that instead
     cnames <- sub('_pval', '', colnames(dat)[-1])
 
-    dataset_ids <- paste(covariate_metadata()$dataset,
-                         covariate_metadata()$phenotype, sep='_')
-    cov_categories <- covariate_metadata()$category[match(cnames, dataset_ids)]
+    dataset_ids <- paste(phenotype_metadata()$dataset,
+                         phenotype_metadata()$phenotype, sep='_')
+    cov_categories <- phenotype_metadata()$category[match(cnames, dataset_ids)]
     annot_row <- data.frame(type = factor(cov_categories))
 
     # cov_categories <- rep("", ncol(dat) - 1)
@@ -565,7 +555,7 @@ server <- function(input, output, session) {
     # cov_categories[grepl('treatment|response', cnames)] <- 'treatment'
     # cov_categories[grepl('status|stage|ecog|pfs_event|relapsed', cnames)] <- 'stage'
 
-    # cov_methods <- covariate_metadata()$method[match(cnames, dataset_ids)]
+    # cov_methods <- phenotype_metadata()$method[match(cnames, dataset_ids)]
     # annot_col <- data.frame(method = factor(cov_methods))
 
     # generate covariate correlation matrix
@@ -657,7 +647,7 @@ ui <- function(request) {
           "Rankings",
           selectInput("select_gene_table_format", "Display:", 
                       choices = c('P-values', 'Ranks'), selected = 'Ranks'),
-          withSpinner(dataTableOutput('mm25_genes'))
+          withSpinner(dataTableOutput('mm25_gene_pvals_combined'))
         ),
         tabPanel(
           "Visualize",
@@ -685,7 +675,7 @@ ui <- function(request) {
           "Ranking",
           selectInput("select_pathway_table_format", "Display:", 
                       choices = c('P-values', 'Ranks'), selected = 'Ranks'),
-          withSpinner(dataTableOutput('mm25_pathways'))
+          withSpinner(dataTableOutput('mm25_pathway_pvals_combined'))
         )
       ),
       navbarMenu(
@@ -711,26 +701,25 @@ ui <- function(request) {
           )
         )
       ),
-      # navbarMenu(
-      #   "Functional Enrichment",
-      #   tabPanel(
-      #     "Phenotypes",
-      #     #selectInput("select_fgsea_covariate", "Covariate:", choices =
-               #     covariate_ids()),
-      #     uiOutput("fgsea_select_covariate"),
-      #     withSpinner(dataTableOutput("fgsea_results_indiv"))
-      #   ),
-      #   tabPanel(
-      #     "MM25 Rankings",
-      #     uiOutput("fgsea_select_ranking"),
-      #     withSpinner(dataTableOutput("fgsea_results_combined"))
-      #   ),
-      #   tabPanel(
-      #     "Summary",
-      #     selectInput("select_fgsea_summary", "Display: ", choices = c('Covariates', 'Ranking Methods')),
-      #     withSpinner(dataTableOutput("fgsea_summary_output"))
-      #   )
-      # )
+      navbarMenu(
+        "Functional Enrichment",
+        tabPanel(
+          "Phenotypes",
+          uiOutput("fgsea_select_covariate"),
+          withSpinner(dataTableOutput("fgsea_results_indiv"))
+        ),
+        tabPanel(
+          "MM25 Rankings",
+          uiOutput("fgsea_select_ranking"),
+          withSpinner(dataTableOutput("fgsea_results_combined"))
+        ),
+        tabPanel(
+          "Summary",
+          selectInput("select_fgsea_summary", "Display: ", 
+                      choices = c('Covariates', 'Ranking Methods')),
+          withSpinner(dataTableOutput("fgsea_summary_output"))
+        )
+      ),
       tabPanel(
         "Settings",
         selectInput("select_version", "Version:", choices=c('v1.0', 'v1.1'), selected = 'v1.1')
