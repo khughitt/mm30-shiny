@@ -52,7 +52,7 @@ server <- function(input, output, session) {
   #
   # Reactives
   #
-  
+
   # load config
   cfg <- reactive({
     req(input$select_version)
@@ -151,7 +151,7 @@ server <- function(input, output, session) {
   # load individual dataset gene expression data;
   # used to generate gene-level feature vs. phenotype plots
   gene_data <- reactive({
-    gene_infiles <- lapply(dataset_cfgs(), function(x) { 
+    gene_infiles <- lapply(dataset_cfgs(), function(x) {
       x$features$genes$rna
     })
 
@@ -313,8 +313,8 @@ server <- function(input, output, session) {
     )
 
     if (!is.na(pheno_mdata$overall_design)) {
-      tag_list <- tagAppendChildren(tag_list, hr(), 
-                                    tags$b("Overall Design:"), br(), 
+      tag_list <- tagAppendChildren(tag_list, hr(),
+                                    tags$b("Overall Design:"), br(),
                                     pheno_mdata$abstract, br())
     }
 
@@ -378,17 +378,51 @@ server <- function(input, output, session) {
   # Tables
   #
   output$mm25_genes <- renderDataTable({
+    req(input$select_gene_table_format)
+
     float_cols <- paste0(c('mean', 'median', 'min', 'sumlog', 'sumz'), '_pval')
 
-    DT::datatable(mm25_genes(), style = 'bootstrap', options = list(pageLength = 15)) %>%
-      formatRound(columns = float_cols, digits = 5)
+    dat <- mm25_genes()
+
+    # convert to ranks, if requested
+    if (input$select_gene_table_format == 'Ranks') {
+      dat <- dat %>%
+        mutate_at(vars(ends_with("_pval")), dense_rank)
+    }
+
+    # construct data table
+    out <- DT::datatable(dat, style = 'bootstrap', options = list(pageLength = 15))
+
+    if (input$select_gene_table_format == 'P-values') {
+      out <- out %>% 
+        formatRound(columns = float_cols, digits = 5)
+    }
+
+    out
   })
   output$mm25_pathways <- renderDataTable({
+    req(input$select_pathway_table_format)
+
     float_cols <- paste0(c('mean', 'median', 'min', 'sumlog', 'sumz'), '_pval')
 
-    DT::datatable(mm25_pathways() %>% select(-gene_set),
-                  style = 'bootstrap', escape = FALSE, options = list(pageLength = 15)) %>%
-      formatRound(columns = float_cols, digits = 5)
+    dat <- mm25_pathways()
+
+    # convert to ranks, if requested
+    if (input$select_pathway_table_format == 'Ranks') {
+      dat <- dat %>%
+        mutate_at(vars(ends_with("_pval")), dense_rank)
+    }
+
+    # construct data table
+    out <- DT::datatable(dat %>% select(-gene_set),
+                  style = 'bootstrap', escape = FALSE, options = list(pageLength = 15))
+
+    if (input$select_pathway_table_format == 'P-values') {
+      out <- out %>%
+        formatRound(columns = float_cols, digits = 5)
+    }
+
+    out
   })
 
   output$fgsea_results_indiv <- renderDataTable({
@@ -621,6 +655,8 @@ ui <- function(request) {
         "Genes",
         tabPanel(
           "Rankings",
+          selectInput("select_gene_table_format", "Display:", 
+                      choices = c('P-values', 'Ranks'), selected = 'Ranks'),
           withSpinner(dataTableOutput('mm25_genes'))
         ),
         tabPanel(
@@ -647,6 +683,8 @@ ui <- function(request) {
         "Pathways",
         tabPanel(
           "Ranking",
+          selectInput("select_pathway_table_format", "Display:", 
+                      choices = c('P-values', 'Ranks'), selected = 'Ranks'),
           withSpinner(dataTableOutput('mm25_pathways'))
         )
       ),
