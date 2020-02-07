@@ -45,6 +45,10 @@ heatmap_theme <- dark_theme_gray() +
 # plot colors
 color_pal <- c('#36c764', '#c73699', '#3650c7', '#c7ac36', '#c7365f', '#bb36c7')
 
+# options for survival plot upper/lower expression cutoffs
+surv_expr_cutoffs <- seq(5, 50, by = 5)
+names(surv_expr_cutoffs) <- paste0(surv_expr_cutoffs, " %")
+
 #############################
 #
 # Shiny Server
@@ -78,6 +82,10 @@ server <- function(input, output, session) {
     dat <- dat %>%
       inner_join(dataset_metadata, by = 'dataset')
 
+    # add covariate id
+    dat$covariate_id <- sprintf("%s_%s_pval", dat$dataset, dat$phenotype)
+
+    # add association category
     dat$category <- factor(dat$category)
 
     # get the number of genes and samples in processed expression data
@@ -86,6 +94,18 @@ server <- function(input, output, session) {
 
     dat$num_genes   <- as.numeric(num_genes[dat$dataset])
     dat$num_samples <- as.numeric(num_samples[dat$dataset])
+
+    # add number of significant gene associations and fgsea results
+    num_sig_assoc <- apply(mm25_gene_pvals()[, -1], 2, function (x) {
+      sum(x < 0.01, na.rm = TRUE)
+    })
+
+    dat$num_sig_assoc <- num_sig_assoc[match(dat$covariate_id, names(num_sig_assoc))]
+
+    # add number of significant fgsea terms
+    fgsea_summary <- read_tsv(cfg()$fgsea_summary_indiv, col_types = cols())
+
+    dat$num_sig_gsea <- fgsea_summary$num_sig[match(fgsea_summary$field, dat$covariate_id)]
 
     dat
   })
@@ -216,8 +236,12 @@ server <- function(input, output, session) {
   # reactives - fgsea 
   #
   fgsea_summary_indiv <- reactive({
-    read_tsv(cfg()$fgsea_summary_indiv, col_types = cols()) %>%
-      arrange(desc(num_sig))
+    # dat <- read_tsv(cfg()$fgsea_summary_indiv, col_types = cols()) %>%
+    #   arrange(desc(num_sig))
+
+    phenotype_metadata() %>%
+      select(dataset, phenotype, num_samples, num_sig_gsea, num_sig_assoc) %>%
+      arrange(desc(num_sig_gsea))
   })
 
   fgsea_summary_combined <- reactive({
@@ -332,17 +356,19 @@ server <- function(input, output, session) {
   })
 
   output$fgsea_select_covariate <- renderUI({
-    fgsea_summary <- fgsea_summary_indiv()
+    fgsea_summary <- fgsea_summary_indiv() %>%
+      select(dataset, phenotype, num_sig = num_sig_gsea) %>%
+      mutate(covariate_id = sprintf("%s_%s_pval", dataset, phenotype))
 
     opts <- covariate_ids()
 
-    num_sig <- fgsea_summary$num_sig[match(opts, fgsea_summary$field)]
+    num_sig <- fgsea_summary$num_sig[match(opts, fgsea_summary$covariate_id)]
 
     # include number of significant terms in labels
     names(opts) <- sprintf("%s (#sig: %d)", opts, num_sig)
 
     # order labels in decreasing order of functional enrichment
-    opts <- opts[match(fgsea_summary$field, opts)]
+    opts <- opts[match(fgsea_summary$covariate_id, opts)]
 
     selectInput("select_fgsea_covariate", "Covariate:", choices = opts)
   })
@@ -446,6 +472,8 @@ server <- function(input, output, session) {
   #
   output$gene_plot <- renderPlot({
     req(input$select_covariate)
+    req(input$select_survival_expr_cutoffs)
+
     pheno <- input$select_covariate
 
     # work-around: detect MMRF prefix (includes underscore)
@@ -470,21 +498,29 @@ server <- function(input, output, session) {
 
       dat <- data.frame(feature, time = time_dat, event = event_dat)
 
-      # divide gene expression into quartiles
-      expr_quartiles <- quantile(dat$feature)
+      # divide gene expression into quantiles
+      cat('\n===\n')
+      cat(input$select_survival_expr_cutoffs)
+      cat('\n===\n')
+
+      cutoff <- as.numeric(input$select_survival_expr_cutoffs)
+
+      expr_quantiles <- quantile(dat$feature, c(cutoff / 100, 1 - (cutoff / 100)))
 
       dat$Expression <- ""
-      dat$Expression[dat$feature <= expr_quartiles[2]] <- "Lower 25%"
-      dat$Expression[dat$feature >= expr_quartiles[4]] <- "Upper 25%"
+      dat$Expression[dat$feature <= expr_quantiles[1]] <- paste0("Lower ", names(expr_quantiles)[1])
+      dat$Expression[dat$feature >= expr_quantiles[2]] <- paste0("Upper ", names(expr_quantiles)[1]) 
 
-      # drop all data except for upper and lower quartiles
+      # drop all data except for upper and lower quantiles
       dat <- dat %>%
         filter(Expression != "")
+
+      num_samples <- nrow(dat)
 
       dat$Expression <- factor(dat$Expression)
 
       cov_label <- str_to_title(gsub('_', ' ', covariate))
-      plt_title <- sprintf("%s: %s vs. %s", dataset, cov_label, input$select_gene)
+      plt_title <- sprintf("%s: %s vs. %s (n = %d)", dataset, cov_label, input$select_gene, num_samples)
 
       # perform fit on binarized data
       fit <- survfit(Surv(time, event) ~ Expression, data = dat)
@@ -628,7 +664,10 @@ server <- function(input, output, session) {
 
   output$fgsea_summary_plot <- renderPlotly({
     # retrieve indiv and combined fgsea results
-    dat <- rbind(cbind(fgsea_summary_indiv(), type = 'individual'),
+    indiv_dat <- phenotype_metadata() %>% 
+      select(field = covariate_id, num_sig = num_sig_gsea)
+
+    dat <- rbind(cbind(indiv_dat, type = 'individual'),
                  cbind(fgsea_summary_combined(), type = 'combined'))
 
     dat$type <- factor(dat$type)
@@ -685,11 +724,15 @@ ui <- function(request) {
               uiOutput('select_covariate'),
               helpText("Phenotype / covariate to compare gene expression or SNP counts against."),
               hr(),
+              selectInput('select_survival_expr_cutoffs', 'Upper/Lower Gene Expression Cutoffs:', 
+                          choices=surv_expr_cutoffs, selected = 25),
+              helpText("Upper and lower feature expression percentile cutoffs to use for two survival groups."),
+              hr(),
               uiOutput('covariate_summary')
             ),
             column(
               width = 8,
-              withSpinner(plotOutput('gene_plot', height = '800px'))
+              withSpinner(plotOutput('gene_plot', height = '760px'))
             )
           )
         )
