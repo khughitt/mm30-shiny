@@ -71,6 +71,12 @@ server <- function(input, output, session) {
 
     dat <- read_feather(cfg()$phenotype_metadata)
 
+    if ('feature_level' %in% colnames(dat)) {
+      dat <- dat %>%
+        filter(feature_level == 'genes') %>%
+        select(-feature_level)
+    }
+
     # work-around: manually add MMRF to dataset metadata
     dataset_metadata <- rbind(dataset_metadata,
       c('MMRF', 'MMRF CoMMpass Study IA14', NA, NA, NA, NA, NA, "GPL11154", NA,
@@ -83,7 +89,8 @@ server <- function(input, output, session) {
       inner_join(dataset_metadata, by = 'dataset')
 
     # add covariate id
-    dat$covariate_id <- sprintf("%s_%s_pval", dat$dataset, dat$phenotype)
+    # dat$covariate_id <- sprintf("%s_%s_pval", dat$dataset, dat$phenotype)
+    dat$covariate_id <- sprintf("%s_%s", dat$dataset, dat$phenotype)
 
     # add association category
     dat$category <- factor(dat$category)
@@ -105,7 +112,10 @@ server <- function(input, output, session) {
     # add number of significant fgsea terms
     fgsea_summary <- read_tsv(cfg()$fgsea_summary_indiv, col_types = cols())
 
-    dat$num_sig_gsea <- fgsea_summary$num_sig[match(fgsea_summary$field, dat$covariate_id)]
+    # backwards-compat (MM25 v1.0 - v1.1)
+    fgsea_summary$field <- sub('_pval$', '', fgsea_summary$field)
+
+    dat$num_sig_gsea <- fgsea_summary$num_sig[match(dat$covariate_id, fgsea_summary$field)]
 
     dat
   })
@@ -142,7 +152,12 @@ server <- function(input, output, session) {
 
   # individual dataset p-values
   mm25_gene_pvals <- reactive({
-    read_feather(cfg()$gene_pvals_indiv)
+    dat <- read_feather(cfg()$gene_pvals_indiv)
+
+    # backwards-compat (v1.0 - v1.1)
+    colnames(dat) <- sub('_pval$', '', colnames(dat))
+
+    dat
   })
 
   mm25_pathway_pvals <- reactive({
@@ -225,11 +240,11 @@ server <- function(input, output, session) {
 
     # determine selected dataset / covariate
     dataset_id <- unlist(str_split(input$select_covariate, '_'))[1]
-    covariate_id <- sub('_pval', '', sub(paste0(dataset_id, '_'), '', input$select_covariate))
+    pheno <- sub('_pval', '', sub(paste0(dataset_id, '_'), '', input$select_covariate))
 
     # retrieve relevant metadata
     phenotype_metadata() %>%
-      filter(dataset ==  dataset_id & phenotype == covariate_id)
+      filter(dataset ==  dataset_id & phenotype == pheno)
   })
 
   #
@@ -250,7 +265,12 @@ server <- function(input, output, session) {
   })
 
   fgsea_results_indiv <- reactive({
-    read_parquet(cfg()$fgsea_results_indiv) %>%
+    dat <- read_parquet(cfg()$fgsea_results_indiv)
+
+    # backwards-compat (v1.0 - v1.1)
+    dat$field <- sub('_pval$', '', dat$field)
+
+    dat %>%
         select(-dataset) %>%
         filter(padj < 0.05) %>%
         arrange(padj)
@@ -358,7 +378,8 @@ server <- function(input, output, session) {
   output$fgsea_select_covariate <- renderUI({
     fgsea_summary <- fgsea_summary_indiv() %>%
       select(dataset, phenotype, num_sig = num_sig_gsea) %>%
-      mutate(covariate_id = sprintf("%s_%s_pval", dataset, phenotype))
+      mutate(covariate_id = sprintf("%s_%s", dataset, phenotype))
+      # mutate(covariate_id = sprintf("%s_%s_pval", dataset, phenotype))
 
     opts <- covariate_ids()
 
@@ -398,7 +419,7 @@ server <- function(input, output, session) {
   output$mm25_gene_pvals_combined <- renderDataTable({
     req(input$select_gene_table_format)
 
-    float_cols <- paste0(c('mean', 'median', 'min', 'sumlog', 'sumz'), '_pval')
+    float_cols <- paste0(c('mean', 'median', 'min', 'sumlog', 'sumz', 'sumz_weighted'), '_pval')
 
     dat <- mm25_gene_pvals_combined()
 
@@ -421,7 +442,7 @@ server <- function(input, output, session) {
   output$mm25_pathway_pvals_combined <- renderDataTable({
     req(input$select_pathway_table_format)
 
-    float_cols <- paste0(c('mean', 'median', 'min', 'sumlog', 'sumz'), '_pval')
+    float_cols <- paste0(c('mean', 'median', 'min', 'sumlog', 'sumz', 'sumz_weighted'), '_pval')
 
     dat <- mm25_pathway_pvals_combined()
 
@@ -499,10 +520,6 @@ server <- function(input, output, session) {
       dat <- data.frame(feature, time = time_dat, event = event_dat)
 
       # divide gene expression into quantiles
-      cat('\n===\n')
-      cat(input$select_survival_expr_cutoffs)
-      cat('\n===\n')
-
       cutoff <- as.numeric(input$select_survival_expr_cutoffs)
 
       expr_quantiles <- quantile(dat$feature, c(cutoff / 100, 1 - (cutoff / 100)))
@@ -799,7 +816,7 @@ ui <- function(request) {
       ),
       tabPanel(
         "Settings",
-        selectInput("select_version", "Version:", choices=c('v1.0', 'v1.1'), selected = 'v1.1')
+        selectInput("select_version", "Version:", choices=c('v1.0', 'v1.1', 'v1.2'), selected = 'v1.2')
       )
     )
   )
