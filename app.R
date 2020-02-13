@@ -126,7 +126,8 @@ server <- function(input, output, session) {
   # mm25_gene_scores <- read_feather(cfg()$gene_scores)
 
   mm25_gene_pvals_combined <- reactive({
-    read_feather(cfg()$gene_pvals_combined)
+    read_feather(cfg()$gene_pvals_combined) %>%
+      select(symbol, sumz_wt_pval, sumz_pval, sumlog_pval, everything())
   })
 
   # pathways
@@ -140,10 +141,9 @@ server <- function(input, output, session) {
 
     msigdb_links <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>",
                             msigdb_ids, dat$gene_set)
-    dat <- dat %>%
-      add_column(pathway = msigdb_links, .before = 1)
-
-    dat
+    dat %>%
+      add_column(pathway = msigdb_links, .before = 1) %>%
+      select(pathway, sumz_wt_pval, sumz_pval, sumlog_pval, everything())
   })
     # inner_join(mm25_pathway_scores, by = "gene_set")
 
@@ -731,7 +731,7 @@ ui <- function(request) {
       id = "main",
       theme = shinytheme("darkly"),
       title = textOutput("page_title"),
-      windowTitle = "MM25 (v1.0)",
+      windowTitle = "MM25",
 
       navbarMenu(
         "Genes",
