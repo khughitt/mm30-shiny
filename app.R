@@ -2,6 +2,8 @@
 # Feature weights shiny UI
 # KH Jan 2020
 #
+# TODO: simplify by renaming symbol/pathway to "feature_id"?
+#
 library(arrow)
 library(DT)
 library(feather)
@@ -16,6 +18,8 @@ library(survival)
 library(survminer)
 library(tidyverse)
 library(yaml)
+
+source("R/plotting.R")
 
 options(stringsAsFactors = FALSE)
 options(spinner.color="#00bc8c")
@@ -41,6 +45,9 @@ heatmap_theme <- dark_theme_gray() +
         legend.background = element_rect(fill = "#222222"),
         axis.text.x = element_text(angle = 90),
         axis.line = element_line(color = "white"))
+
+# feature levels
+feature_levels <- c(Genes = "genes", Pathways = "gene_sets")
 
 # plot colors
 color_pal <- c("#36c764", "#c73699", "#3650c7", "#c7ac36", "#c7365f", "#bb36c7")
@@ -103,7 +110,7 @@ server <- function(input, output, session) {
     dat$num_samples <- as.numeric(num_samples[dat$dataset])
 
     # add number of significant gene associations and fgsea results
-    num_sig_assoc <- apply(mm25_gene_pvals()[, -1], 2, function (x) {
+    num_sig_assoc <- apply(mm25_feature_padjs()[, -1], 2, function (x) {
       sum(x < 0.01, na.rm = TRUE)
     })
 
@@ -121,17 +128,10 @@ server <- function(input, output, session) {
   })
 
   # load MM25 combined pvals
-
-  # genes
-  # mm25_gene_scores <- read_feather(cfg()$gene_scores)
-
   mm25_gene_pvals_combined <- reactive({
     read_feather(cfg()$gene_pvals_combined) %>%
       select(symbol, sumz_wt_pval, sumz_pval, sumlog_pval, everything())
   })
-
-  # pathways
-  # mm25_pathway_scores <- read_feather(cfg()$pathway_scores)
 
   mm25_pathway_pvals_combined <- reactive({
     dat <- read_feather(cfg()$pathway_pvals_combined)
@@ -145,14 +145,26 @@ server <- function(input, output, session) {
       add_column(pathway = msigdb_links, .before = 1) %>%
       select(pathway, sumz_wt_pval, sumz_pval, sumlog_pval, everything())
   })
-    # inner_join(mm25_pathway_scores, by = "gene_set")
+  
+  mm25_gene_pvals_indiv <- reactive({
+    read_feather(cfg()$gene_pvals_indiv) 
+  })
 
-  # clean-up
-  # rm(mm25_gene_scores, mm25_pathway_scores)
+  mm25_pathway_pvals_indiv <- reactive({
+    read_feather(cfg()$pathway_pvals_indiv) 
+  })
 
   # individual dataset p-values
-  mm25_gene_pvals <- reactive({
-    dat <- read_feather(cfg()$gene_pvals_indiv)
+  mm25_feature_pvals <- reactive({
+    req(rv$select_plot_feature)
+
+    if (rv$select_plot_feature_level == 'genes') {
+      dat <- mm25_gene_pvals_indiv() %>%
+        rename(feature_id = symbol)
+    } else {
+      dat <- mm25_pathway_pvals_indiv() %>%
+        rename(feature_id = gene_set)
+    }
 
     # backwards-compat (v1.0 - v1.1)
     colnames(dat) <- sub("_pval$", "", colnames(dat))
@@ -160,18 +172,14 @@ server <- function(input, output, session) {
     dat
   })
 
-  mm25_pathway_pvals <- reactive({
-    read_feather(cfg()$pathway_pvals_indiv)
-  })
-
-  mm25_gene_padjs <- reactive({
-    mm25_gene_pvals() %>%
-      mutate_at(vars(-symbol), p.adjust, method = "BH")
+  mm25_feature_padjs <- reactive({
+    mm25_feature_pvals() %>%
+      mutate_at(vars(-feature_id), p.adjust, method = "BH")
   })
 
   # list of covariates
   covariate_ids <- reactive({
-    colnames(mm25_gene_pvals())[-1]
+    colnames(mm25_feature_pvals())[-1]
   })
 
   # load individual dataset configs;
@@ -202,6 +210,19 @@ server <- function(input, output, session) {
     dat
   })
 
+  # load individual dataset gene expression data;
+  # used to generate gene-level feature vs. phenotype plots
+  pathway_data <- reactive({
+    infiles <- lapply(dataset_cfgs(), function(x) {
+      x$features$gene_sets$rna
+    })
+
+    dat <- lapply(infiles, read_parquet)
+    names(dat) <- names(dataset_cfgs())
+
+    dat
+  })
+
   pheno_data <- reactive({
     dat <- list()
 
@@ -220,15 +241,15 @@ server <- function(input, output, session) {
     dat
   })
 
-  gene_pvals <- reactive({
-    req(input$select_gene)
+  selected_feature_pvals <- reactive({
+    req(rv$select_plot_feature)
 
-    mask <- mm25_gene_pvals()$symbol == input$select_gene
+    mask <- mm25_feature_pvals()$feature_id == rv$select_plot_feature
 
     dat <- tibble(
       phenotype = covariate_ids(),
-      pval = as.numeric(mm25_gene_pvals()[mask, -1]),
-      padj = as.numeric(mm25_gene_padjs()[mask, -1])
+      pval = as.numeric(mm25_feature_pvals()[mask, -1]),
+      padj = as.numeric(mm25_feature_padjs()[mask, -1])
     )
 
     dat <- dat %>%
@@ -236,11 +257,11 @@ server <- function(input, output, session) {
   })
 
   selected_phenotype_metadata <- reactive({
-    req(input$select_covariate)
+    req(rv$select_plot_covariate)
 
     # determine selected dataset / covariate
-    dataset_id <- unlist(str_split(input$select_covariate, "_"))[1]
-    pheno <- sub("_pval", "", sub(paste0(dataset_id, "_"), "", input$select_covariate))
+    dataset_id <- unlist(str_split(rv$select_plot_covariate, "_"))[1]
+    pheno <- sub("_pval", "", sub(paste0(dataset_id, "_"), "", rv$select_plot_covariate))
 
     # retrieve relevant metadata
     phenotype_metadata() %>%
@@ -248,7 +269,7 @@ server <- function(input, output, session) {
   })
 
   #
-  # reactives - fgsea 
+  # reactives - fgsea
   #
   fgsea_summary_indiv <- reactive({
     # dat <- read_tsv(cfg()$fgsea_summary_indiv, col_types = cols()) %>%
@@ -360,19 +381,24 @@ server <- function(input, output, session) {
   #
   # Form fields
   #
-  output$select_covariate <- renderUI({
-    req(input$select_gene)
+  output$select_plot_covariate <- renderUI({
+    req(rv$select_plot_feature)
 
-    dat <- gene_pvals()
+    dat <- selected_feature_pvals()
 
     # select choices (e.g. "MMRF IA14 overall survival (p = 0.003)")
-    opts <- gene_pvals()$phenotype
+    opts <- selected_feature_pvals()$phenotype
 
     names(opts) <- sprintf("%s (padj = %0.3f)",
                            gsub("_", " ", sub("_pval", "", dat$phenotype)),
                            dat$padj)
 
-    selectInput("select_covariate", "Covariate:", choices = opts)
+    # cat("SELECT_PLOT_COVARIATE:\n")
+    # cat(paste0(rv$select_plot_feature, '\n'))
+    # cat(opts)
+    # cat('\n')
+
+    selectInput("select_plot_covariate", "Covariate:", choices = opts)
   })
 
   output$fgsea_select_covariate <- renderUI({
@@ -408,9 +434,51 @@ server <- function(input, output, session) {
     selectInput("select_fgsea_ranking", "Ranking:", choices = opts)
   })
 
+  rv <- reactiveValues(
+    select_plot_feature_level = NULL,
+    select_plot_feature = NULL,
+    select_plot_covariate = NULL
+  )
+
   observeEvent(input$select_version, {
-    updateSelectizeInput(session, "select_gene",
-                         choices = as.character(mm25_gene_pvals_combined()$symbol), server = TRUE)
+    # reset form fields when version changes
+    updateSelectInput(session, "select_plot_feature_level", "Feature Level:", 
+                      choices = feature_levels, selected = "genes")
+  })
+
+  observeEvent(input$select_plot_feature_level, {
+    rv$select_plot_feature <- NULL
+    rv$select_plot_covariate <- NULL
+    rv$select_plot_feature_level <- input$select_plot_feature_level 
+
+    if (rv$select_plot_feature_level == "genes") {
+      select_choices <- as.character(mm25_gene_pvals_combined()$symbol)
+    } else {
+      select_choices <- as.character(mm25_pathway_pvals_combined()$gene_set)
+    }
+
+    updateSelectizeInput(session, "select_plot_feature", choices = select_choices,
+                         server = TRUE)
+  })
+
+  observeEvent(input$select_plot_feature, {
+    rv$select_plot_covariate <- NULL
+    rv$select_plot_feature <- input$select_plot_feature
+
+    # dat <- selected_feature_pvals()
+    #
+    # # select choices (e.g. "MMRF IA14 overall survival (p = 0.003)")
+    # opts <- selected_feature_pvals()$phenotype
+    #
+    # names(opts) <- sprintf("%s (padj = %0.3f)",
+    #                        gsub("_", " ", sub("_pval", "", dat$phenotype)),
+    #                        dat$padj)
+    #
+    # updateSelectInput(session, "select_plot_covariate", "Covariate:", choices = opts)
+  })
+
+  observeEvent(input$select_plot_covariate, {
+    rv$select_plot_covariate <- input$select_plot_covariate 
   })
 
   #
@@ -433,12 +501,13 @@ server <- function(input, output, session) {
     out <- DT::datatable(dat, style = "bootstrap", options = list(pageLength = 15))
 
     if (input$select_gene_table_format == "P-values") {
-      out <- out %>% 
+      out <- out %>%
         formatRound(columns = float_cols, digits = 5)
     }
 
     out
   })
+
   output$mm25_pathway_pvals_combined <- renderDataTable({
     req(input$select_pathway_table_format)
 
@@ -491,108 +560,56 @@ server <- function(input, output, session) {
   #
   # Plots
   #
-  output$gene_plot <- renderPlot({
-    req(input$select_covariate)
+  output$feature_plot <- renderPlot({
+    req(rv$select_plot_covariate)
     req(input$select_survival_expr_cutoffs)
 
-    pheno <- input$select_covariate
+    pheno <- rv$select_plot_covariate
 
-    # backwards-compat
+    cat("Updating plot!\n")
+
+    # backwards-compatibility
     pheno <- sub("_pval", "", pheno)
 
+    # get dataset and covariate names
     dataset <- unlist(str_split(pheno, "_"))[1]
     covariate <- sub(paste0(dataset, "_"), "", pheno)
 
-    # config
-    assoc_cfg <- dataset_cfgs()[[dataset]]$phenotypes$associations[[covariate]]
-
-    if (assoc_cfg$method == "survival") {
-      # survival data
-      feature <- gene_data()[[dataset]] %>%
-        filter(symbol == input$select_gene) %>%
+    # feature data
+    if (rv$select_plot_feature_level == 'genes') {
+      feat_dat <- gene_data()[[dataset]] %>%
+        filter(symbol == rv$select_plot_feature) %>%
         select(-symbol) %>%
         as.numeric()
-
-      time_dat <- pull(pheno_data()[[dataset]], assoc_cfg$params$time)
-      event_dat <- pull(pheno_data()[[dataset]], assoc_cfg$params$event)
-
-      dat <- data.frame(feature, time = time_dat, event = event_dat)
-
-      # divide gene expression into quantiles
-      cutoff <- as.numeric(input$select_survival_expr_cutoffs)
-
-      expr_quantiles <- quantile(dat$feature, c(cutoff / 100, 1 - (cutoff / 100)))
-
-      dat$Expression <- ""
-      dat$Expression[dat$feature <= expr_quantiles[1]] <- paste0("Lower ", names(expr_quantiles)[1])
-      dat$Expression[dat$feature >= expr_quantiles[2]] <- paste0("Upper ", names(expr_quantiles)[1]) 
-
-      # determine units to use
-      if (dataset %in% c("MMRF", "GSE7039", "GSE57317", "GSE9782")) {
-        time_units <- "days"
-      } else if (dataset %in% c("GSE24080")) {
-        time_units <- "weeks"
-      } else if (dataset %in% c("GSE19784")) {
-        time_units <- "months"
-      } else {
-        time_units <- "?"
-      }
-
-      # drop all data except for upper and lower quantiles
-      dat <- dat %>%
-        filter(Expression != "")
-
-      num_samples <- nrow(dat)
-
-      dat$Expression <- factor(dat$Expression)
-
-      cov_label <- str_to_title(gsub("_", " ", covariate))
-      plt_title <- sprintf("%s: %s vs. %s (n = %d)", dataset, cov_label, input$select_gene, num_samples)
-
-      # perform fit on binarized data
-      fit <- survfit(Surv(time, event) ~ Expression, data = dat)
-
-      # display a kaplan meier plot for result
-      ggsurvplot(fit, data = dat, ggtheme = theme_dark(), palette = color_pal,
-                 title = plt_title,
-                 xlab = sprintf("Time (%s)", time_units),
-                 legend = "bottom", legend.title = "Legend")
     } else {
-      # logistic regression fit plot
-      feature <- gene_data()[[dataset]] %>%
-        filter(symbol == input$select_gene) %>%
-        select(-symbol) %>%
+      feat_dat <- pathway_data()[[dataset]] %>%
+        filter(gene_set == rv$select_plot_feature) %>%
+        select(-gene_set) %>%
         as.numeric()
+    }
 
-      # pheno data
-      response <- pull(pheno_data()[[dataset]], assoc_cfg$params$field)
+    # get config for selected feature-phenotype association
+    assoc_cfg <- dataset_cfgs()[[dataset]]$phenotypes$associations[[covariate]]
+    assoc_method <- assoc_cfg$method
 
-      dat <- data.frame(feature, response)
+    if (assoc_method == "survival") {
+      # survival plot
+      pheno_dat <- pheno_data()[[dataset]]
 
-      dat$response <- factor(dat$response)
+      time_dat <- pull(pheno_dat, assoc_cfg$params$time)
+      event_dat <- pull(pheno_dat, assoc_cfg$params$event)
 
-      # drop any entries with missing values
-      dat <- dat[!is.na(dat$response), ]
+      dat <- data.frame(feature = feat_dat, time = time_dat, event = event_dat)
 
-      # draw violin + jitter plot
-      set.seed(1)
+      plot_survival(dat, dataset, covariate, rv$select_plot_feature,
+                    input$select_survival_expr_cutoffs, color_pal, theme_dark)
+    } else {
+      # violin plot
+      response <- factor(pull(pheno_data()[[dataset]], assoc_cfg$params$field))
 
-      ggplot(dat, aes(x = response, y = feature)) +
-        # geom_boxplot(aes(fill = response, color = response), outlier.shape = NA) +
-        geom_violin(aes(fill = response, color = response), alpha = 0.5, draw_quantiles = c(0.5)) +
-        geom_jitter(aes(color = response), alpha = 0.8) +
-        scale_fill_manual(values = color_pal) +
-        scale_color_manual(values = color_pal) +
-        ggtitle(sprintf("%s: %s vs. %s", dataset, input$select_gene, covariate)) +
-        xlab(covariate) +
-        ylab(sprintf("%s expression", input$select_gene)) +
-        theme_dark()
-        # dark_theme_gray(base_size = 18) +
-        # theme(axis.text.x = element_text(angle = 90),
-        #       plot.background = element_rect(fill = "#222222"),
-        #       panel.border = element_rect(colour = "#333333", fill = NA, size = 1),
-        #       panel.grid.major = element_line(color = "#555555", size = 0.2),
-        #       panel.grid.minor = element_line(color = "#555555", size = 0.2))
+      dat <- data.frame(feature = feat_dat, response)
+
+      plot_categorical(dat, dataset, covariate, rv$select_plot_feature, color_pal, theme_dark)
     }
   })
 
@@ -602,9 +619,10 @@ server <- function(input, output, session) {
 
     # determine dataset to use
     if (input$select_cov_similarity_feat_type == "Genes") {
-      dat <- mm25_gene_pvals()
+      dat <- mm25_gene_pvals_indiv()
     } else {
-      dat <- mm25_pathway_pvals()
+      dat <- mm25_pathway_pvals_indiv()
+
     }
 
     # determine covariate functional groups from labels;
@@ -645,20 +663,20 @@ server <- function(input, output, session) {
               side_color_layers = heatmap_theme)
   })
 
-  output$gene_pval_dists <- renderPlot({
-    req(input$select_gene_pval_dist_type)
+  output$feature_pval_dists <- renderPlot({
+    req(input$select_feature_pval_dist_type)
 
     set.seed(1)
 
     # adjusted / unadjusted p-values
-    if (input$select_gene_pval_dist_type == "Adjusted (BH)") {
-        dat <- mm25_gene_padjs()  %>%
+    if (input$select_feature_pval_dist_type == "Adjusted (BH)") {
+        dat <- mm25_feature_padjs()  %>%
         sample_n(1000) %>%
-        pivot_longer(-symbol, names_to = "covariate", values_to ="pvalue")
+        pivot_longer(-feature_id, names_to = "covariate", values_to ="pvalue")
     } else {
-        dat <- mm25_gene_pvals() %>%
+        dat <- mm25_feature_pvals() %>%
         sample_n(1000) %>%
-        pivot_longer(-symbol, names_to = "covariate", values_to ="pvalue")
+        pivot_longer(-feature_id, names_to = "covariate", values_to ="pvalue")
     }
 
     dat$dataset <- str_split(dat$covariate, "_", simplify = TRUE)[, 1]
@@ -674,7 +692,7 @@ server <- function(input, output, session) {
     dat$method[grepl("survival", dat$covariate)] <- "Survival"
     dat$method <- factor(dat$method)
 
-    npages <- ceiling((ncol(mm25_gene_pvals()) - 1) / 9)
+    npages <- ceiling((ncol(mm25_feature_pvals()) - 1) / 9)
 
     plts <- list()
 
@@ -692,7 +710,7 @@ server <- function(input, output, session) {
 
   output$fgsea_summary_plot <- renderPlotly({
     # retrieve indiv and combined fgsea results
-    indiv_dat <- phenotype_metadata() %>% 
+    indiv_dat <- phenotype_metadata() %>%
       select(field = covariate_id, num_sig = num_sig_gsea)
 
     dat <- rbind(cbind(indiv_dat, type = "individual"),
@@ -733,54 +751,52 @@ ui <- function(request) {
       title = textOutput("page_title"),
       windowTitle = "MM25",
 
-      navbarMenu(
+      tabPanel(
         "Genes",
-        tabPanel(
-          "Rankings",
-          selectInput("select_gene_table_format", "Display:", 
-                      choices = c("P-values", "Ranks"), selected = "Ranks"),
-          withSpinner(dataTableOutput("mm25_gene_pvals_combined"))
-        ),
-        tabPanel(
-          "Visualize",
-          fluidRow(
-            column(
-              width = 4,
-              selectizeInput("select_gene", "Gene:", choices = NULL),
-              helpText("Gene to visualize."),
-              hr(),
-              uiOutput("select_covariate"),
-              helpText("Phenotype / covariate to compare gene expression or SNP counts against."),
-              hr(),
-              selectInput("select_survival_expr_cutoffs", "Upper/Lower Gene Expression Cutoffs:", 
-                          choices=surv_expr_cutoffs, selected = 25),
-              helpText("Upper and lower feature expression percentile cutoffs to use for two survival groups."),
-              hr(),
-              uiOutput("covariate_summary")
-            ),
-            column(
-              width = 8,
-              withSpinner(plotOutput("gene_plot", height = "760px"))
-            )
-          )
-        )
+        selectInput("select_gene_table_format", "Display:",
+                    choices = c("P-values", "Ranks"), selected = "Ranks"),
+        withSpinner(dataTableOutput("mm25_gene_pvals_combined"))
       ),
-      navbarMenu(
+      tabPanel(
         "Pathways",
-        tabPanel(
-          "Ranking",
-          selectInput("select_pathway_table_format", "Display:", 
-                      choices = c("P-values", "Ranks"), selected = "Ranks"),
-          withSpinner(dataTableOutput("mm25_pathway_pvals_combined"))
+        selectInput("select_pathway_table_format", "Display:",
+                    choices = c("P-values", "Ranks"), selected = "Ranks"),
+        withSpinner(dataTableOutput("mm25_pathway_pvals_combined"))
+      ),
+      tabPanel(
+        "Visualize",
+        fluidRow(
+          column(
+            width = 4,
+            selectInput("select_plot_feature_level", "Feature Level:", 
+                          choices = feature_levels, selected = "genes"),
+            helpText("Feature level to visualize."),
+            hr(),
+            selectizeInput("select_plot_feature", "Feature:", choices = NULL),
+            helpText("Feature to visualize."),
+            hr(),
+            uiOutput("select_plot_covariate"),
+            helpText("Phenotype / covariate to compare feature expression or SNP counts against."),
+            hr(),
+            selectInput("select_survival_expr_cutoffs", "Upper/Lower Feature Expression Cutoffs:",
+                        choices=surv_expr_cutoffs, selected = 25),
+            helpText("Upper and lower feature expression percentile cutoffs to use for two survival groups."),
+            hr(),
+            uiOutput("covariate_summary")
+          ),
+          column(
+            width = 8,
+            withSpinner(plotOutput("feature_plot", height = "760px"))
+          )
         )
       ),
       navbarMenu(
         "Covariates",
         tabPanel(
           "P-value Distributions",
-          selectInput("select_gene_pval_dist_type", "P-value type:",
+          selectInput("select_feature_pval_dist_type", "P-value type:",
                       choices = c("Adjusted (BH)", "Unadjusted"), selected = "Unadjusted"),
-          withSpinner(plotOutput("gene_pval_dists", height = "4000px"))
+          withSpinner(plotOutput("feature_pval_dists", height = "4000px"))
         ),
         tabPanel(
           "Covariate Similarity",
@@ -811,7 +827,7 @@ ui <- function(request) {
         ),
         tabPanel(
           "Summary",
-          selectInput("select_fgsea_summary", "Display: ", 
+          selectInput("select_fgsea_summary", "Display: ",
                       choices = c("Covariates", "Ranking Methods")),
           fluidRow(
             column(
