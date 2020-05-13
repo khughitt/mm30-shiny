@@ -110,7 +110,7 @@ server <- function(input, output, session) {
     dat$num_samples <- as.numeric(num_samples[dat$dataset])
 
     # add number of significant gene associations and fgsea results
-    num_sig_assoc <- apply(mm25_feature_padjs()[, -1], 2, function (x) {
+    num_sig_assoc <- apply(mm25_feature_padjs(), 2, function (x) {
       sum(x < 0.01, na.rm = TRUE)
     })
 
@@ -566,8 +566,6 @@ server <- function(input, output, session) {
 
     pheno <- rv$select_plot_covariate
 
-    cat("Updating plot!\n")
-
     # backwards-compatibility
     pheno <- sub("_pval", "", pheno)
 
@@ -625,9 +623,12 @@ server <- function(input, output, session) {
 
     }
 
+    # drop gene names; not needed here
+    dat <- dat[, -1]
+
     # determine covariate functional groups from labels;
     # TODO: load dataset metadata table including groups and use that instead
-    cnames <- sub("_pval", "", colnames(dat)[-1])
+    cnames <- sub("_pval", "", colnames(dat))
 
     dataset_ids <- paste(phenotype_metadata()$dataset,
                          phenotype_metadata()$phenotype, sep="_")
@@ -642,10 +643,14 @@ server <- function(input, output, session) {
     # cov_methods <- phenotype_metadata()$method[match(cnames, dataset_ids)]
     # annot_col <- data.frame(method = factor(cov_methods))
 
+    # -log10 transform p-values
+    dat[dat < 1E-20] <- 1E-20
+    dat <- -log10(dat)
+
     # generate covariate correlation matrix
     # TODO; make -log10 transform optional..
     cor_method <- tolower(input$select_cov_similarity_cor_method)
-    cor_mat <- cor(-log10(pmax(dat[, -1], 1E-20)), method = cor_method, use = "pairwise.complete.obs")
+    cor_mat <- cor(dat, method = cor_method, use = "pairwise.complete.obs")
 
     # row annotations
     row_pal <- color_pal[1:3]
