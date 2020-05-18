@@ -6,7 +6,6 @@
 #
 library(arrow)
 library(DT)
-library(feather)
 library(ggdark)
 library(ggforce)
 library(gridExtra)
@@ -130,11 +129,13 @@ server <- function(input, output, session) {
   # load MM25 combined pvals
   mm25_gene_pvals_combined <- reactive({
     read_feather(cfg()$gene_pvals_combined) %>%
-      select(symbol, sumz_wt_pval, sumz_pval, sumlog_pval, everything())
+      select(symbol, sumz_wt_pval, sumz_pval, sumlog_pval, min_pval, num_present, num_missing)
   })
 
   mm25_pathway_pvals_combined <- reactive({
     dat <- read_feather(cfg()$pathway_pvals_combined)
+
+    message("mm25_pathway_pvals_combined")
 
     # add links to msigdb pathway info pages
     msigdb_ids <- sub("[^_]*_", "", dat$gene_set)
@@ -143,7 +144,7 @@ server <- function(input, output, session) {
                             msigdb_ids, dat$gene_set)
     dat %>%
       add_column(pathway = msigdb_links, .before = 1) %>%
-      select(pathway, sumz_wt_pval, sumz_pval, sumlog_pval, everything())
+      select(pathway, gene_set, sumz_wt_pval, sumz_pval, sumlog_pval, min_pval, num_present, num_missing)
   })
   
   mm25_gene_pvals_indiv <- reactive({
@@ -157,6 +158,8 @@ server <- function(input, output, session) {
   # individual dataset p-values
   mm25_feature_pvals <- reactive({
     req(rv$select_plot_feature)
+
+    message("mm25_feature_pvals")
 
     if (rv$select_plot_feature_level == 'genes') {
       dat <- mm25_gene_pvals_indiv() %>%
@@ -213,11 +216,21 @@ server <- function(input, output, session) {
   # load individual dataset gene expression data;
   # used to generate gene-level feature vs. phenotype plots
   pathway_data <- reactive({
+    message("pathway_data()")
+
+    read_data <- function(x) {
+      if (endsWith(x, 'parquet')) {
+        read_parquet(x)
+      } else {
+        read_feather(x)
+      }
+    }
+
     infiles <- lapply(dataset_cfgs(), function(x) {
       x$features$gene_sets$rna
     })
 
-    dat <- lapply(infiles, read_parquet)
+    dat <- lapply(infiles, read_data)
     names(dat) <- names(dataset_cfgs())
 
     dat
@@ -286,7 +299,13 @@ server <- function(input, output, session) {
   })
 
   fgsea_results_indiv <- reactive({
-    dat <- read_parquet(cfg()$fgsea_results_indiv)
+    infile <- cfg()$fgsea_results_indiv
+
+    if (endsWith(infile, 'parquet')) {
+      dat <- read_parquet(infile)
+    } else {
+      dat <- read_feather(infile)
+    }
 
     # backwards-compat (v1.0 - v1.1)
     dat$field <- sub("_pval$", "", dat$field)
@@ -298,7 +317,15 @@ server <- function(input, output, session) {
   })
 
   fgsea_results_combined <- reactive({
-    read_parquet(cfg()$fgsea_results_combined) %>%
+    infile <- cfg()$fgsea_results_combined
+
+    if (endsWith(infile, 'parquet')) {
+      dat <- read_parquet(infile)
+    } else {
+      dat <- read_feather(infile)
+    }
+
+    dat %>%
       select(-dataset) %>%
       filter(padj < 0.05) %>%
       arrange(padj)
@@ -451,6 +478,8 @@ server <- function(input, output, session) {
     rv$select_plot_covariate <- NULL
     rv$select_plot_feature_level <- input$select_plot_feature_level 
 
+    message("observeEvent(input$select_plot_feature_level)")
+
     if (rv$select_plot_feature_level == "genes") {
       select_choices <- as.character(mm25_gene_pvals_combined()$symbol)
     } else {
@@ -487,7 +516,7 @@ server <- function(input, output, session) {
   output$mm25_gene_pvals_combined <- renderDataTable({
     req(input$select_gene_table_format)
 
-    float_cols <- paste0(c("mean", "median", "min", "sumlog", "sumz", "sumz_weighted"), "_pval")
+    float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_weighted"), "_pval")
 
     dat <- mm25_gene_pvals_combined()
 
@@ -510,8 +539,10 @@ server <- function(input, output, session) {
 
   output$mm25_pathway_pvals_combined <- renderDataTable({
     req(input$select_pathway_table_format)
+    
+    message("mm25_pathway_pvals_combined")
 
-    float_cols <- paste0(c("mean", "median", "min", "sumlog", "sumz", "sumz_weighted"), "_pval")
+    float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_weighted"), "_pval")
 
     dat <- mm25_pathway_pvals_combined()
 
@@ -563,6 +594,8 @@ server <- function(input, output, session) {
   output$feature_plot <- renderPlot({
     req(rv$select_plot_covariate)
     req(input$select_survival_expr_cutoffs)
+
+    message("feature_plot")
 
     pheno <- rv$select_plot_covariate
 
@@ -697,14 +730,14 @@ server <- function(input, output, session) {
     dat$method[grepl("survival", dat$covariate)] <- "Survival"
     dat$method <- factor(dat$method)
 
-    npages <- ceiling((ncol(mm25_feature_pvals()) - 1) / 9)
+    npages <- ceiling((ncol(mm25_feature_pvals()) - 1) / 8)
 
     plts <- list()
 
     for (i in 1:npages) {
       plts[[i]] <- ggplot(dat, aes(x = pvalue, fill = method)) +
         geom_density(alpha = 0.8) +
-        facet_wrap_paginate(~label, ncol = 3, nrow = 3, scales = "free_y", page = i) +
+        facet_wrap_paginate(~label, ncol = 2, nrow = 4, scales = "free_y", page = i) +
         scale_fill_manual(values = color_pal) +
         scale_color_manual(values = color_pal) +
         theme_dark()
@@ -848,7 +881,7 @@ ui <- function(request) {
       ),
       tabPanel(
         "Settings",
-        selectInput("select_version", "Version:", choices=c("v1.0", "v1.1", "v1.2"), selected = "v1.2")
+        selectInput("select_version", "Version:", choices=c("v1.0", "v1.1", "v1.2", "v1.3"), selected = "v1.3")
       )
     )
   )

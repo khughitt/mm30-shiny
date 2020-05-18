@@ -1,0 +1,25 @@
+#
+# MM25 v1.3 configuration
+#
+
+# metadata
+dataset_metadata: '/data/human/geo/metadata.tsv'
+phenotype_metadata: '/data/nih/fassoc/mm25/1.3/metadata/association_metadata.feather'
+
+# gene-level results
+gene_pvals_indiv: '/data/nih/fassoc/mm25/1.3/merged/mm25_gene_association_pvals.feather'
+gene_pvals_combined: '/data/nih/mm25/1.3/all/mm25_gene_scores.feather'
+
+# pathway-level results
+pathway_pvals_indiv: '/data/nih/fassoc/mm25/1.3/merged/mm25_pathway_association_pvals.feather'
+pathway_pvals_combined: '/data/nih/mm25/1.3/all/mm25_pathway_scores.feather'
+
+# dataset config dir
+dataset_cfg_dir: '~/d/r/nih/fassoc/datasets/mm25/1.3'
+
+# functional enrichment results
+fgsea_results_combined: '/data/nih/fgsea/mm25/1.3/results/merged/mm25_gene_scores.feather'
+fgsea_results_indiv: '/data/nih/fgsea/mm25/1.3/results/merged/mm25_gene_association_pvals.feather'
+
+fgsea_summary_combined: '/data/nih/fgsea/mm25/1.3/results/summary/mm25_gene_scores_summary.tsv'
+fgsea_summary_indiv: '/data/nih/fgsea/mm25/1.3/results/summary/mm25_gene_association_pvals_summary.tsv'
