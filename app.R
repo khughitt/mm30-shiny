@@ -881,7 +881,7 @@ ui <- function(request) {
       ),
       tabPanel(
         "Settings",
-        selectInput("select_version", "Version:", choices=c("v1.0", "v1.1", "v1.2", "v1.3"), selected = "v1.3")
+        selectInput("select_version", "Version:", choices=c("v1.0", "v1.1", "v1.2", "v1.3", "v2.0"), selected = "v2.0")
       )
     )
   )
