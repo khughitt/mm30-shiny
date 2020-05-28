@@ -2,12 +2,17 @@
 # Feature weights shiny UI
 # KH Jan 2020
 #
-# TODO: simplify by renaming symbol/pathway to "feature_id"?
+# TODO:
+#
+# - refactor..
+# - simplify by renaming symbol/pathway to "feature_id"?
+# - color gene symbols by pubmed counts, etc.?
 #
 library(arrow)
 library(DT)
 library(ggdark)
 library(ggforce)
+library(ggrepel)
 library(gridExtra)
 library(heatmaply)
 library(plotly)
@@ -16,6 +21,7 @@ library(shinycssloaders)
 library(survival)
 library(survminer)
 library(tidyverse)
+library(uwot)
 library(yaml)
 
 source("R/plotting.R")
@@ -73,6 +79,8 @@ server <- function(input, output, session) {
 
   # load dataset and covariate metadata
   phenotype_metadata <- reactive({
+    message("phenotype_metadata()")
+
     dataset_metadata <- read_tsv(cfg()$dataset_metadata, col_types = cols())
 
     dat <- read_feather(cfg()$phenotype_metadata)
@@ -128,14 +136,24 @@ server <- function(input, output, session) {
 
   # load MM25 combined pvals
   mm25_gene_pvals_combined <- reactive({
-    read_feather(cfg()$gene_pvals_combined) %>%
+    req(input$select_gene_mm25_subset)
+
+    message("mm25_gene_pvals_combined()")
+
+    infile <- cfg()$mm25_scores$genes[[input$select_gene_mm25_subset]]
+
+    read_feather(infile) %>%
       select(symbol, sumz_wt_pval, sumz_pval, sumlog_pval, min_pval, num_present, num_missing)
   })
 
   mm25_pathway_pvals_combined <- reactive({
-    dat <- read_feather(cfg()$pathway_pvals_combined)
+    req(input$select_pathway_mm25_subset)
 
-    message("mm25_pathway_pvals_combined")
+    infile <- cfg()$mm25_scores$pathways[[input$select_pathway_mm25_subset]]
+
+    dat <- read_feather(infile)
+
+    message("mm25_pathway_pvals_combined()")
 
     # add links to msigdb pathway info pages
     msigdb_ids <- sub("[^_]*_", "", dat$gene_set)
@@ -157,9 +175,7 @@ server <- function(input, output, session) {
 
   # individual dataset p-values
   mm25_feature_pvals <- reactive({
-    req(rv$select_plot_feature)
-
-    message("mm25_feature_pvals")
+    message("mm25_feature_pvals()")
 
     if (rv$select_plot_feature_level == 'genes') {
       dat <- mm25_gene_pvals_indiv() %>%
@@ -176,6 +192,8 @@ server <- function(input, output, session) {
   })
 
   mm25_feature_padjs <- reactive({
+    message("mm25_feature_padjs()")
+
     mm25_feature_pvals() %>%
       mutate_at(vars(-feature_id), p.adjust, method = "BH")
   })
@@ -287,6 +305,7 @@ server <- function(input, output, session) {
   fgsea_summary_indiv <- reactive({
     # dat <- read_tsv(cfg()$fgsea_summary_indiv, col_types = cols()) %>%
     #   arrange(desc(num_sig))
+    message("fgsea_summary_indiv()")
 
     phenotype_metadata() %>%
       select(dataset, phenotype, num_samples, num_sig_gsea, num_sig_assoc) %>%
@@ -294,11 +313,17 @@ server <- function(input, output, session) {
   })
 
   fgsea_summary_combined <- reactive({
-    read_tsv(cfg()$fgsea_summary_combined, col_types = cols()) %>%
+    req(input$select_fgsea_subset)
+
+    infile <- cfg()$mm25_fgsea$summary[[input$select_fgsea_subset]]
+
+    read_tsv(infile, col_types = cols()) %>%
       arrange(desc(num_sig))
   })
 
   fgsea_results_indiv <- reactive({
+    message("fgsea_results_indiv()")
+
     infile <- cfg()$fgsea_results_indiv
 
     if (endsWith(infile, 'parquet')) {
@@ -316,20 +341,20 @@ server <- function(input, output, session) {
         arrange(padj)
   })
 
-  fgsea_results_combined <- reactive({
-    infile <- cfg()$fgsea_results_combined
-
-    if (endsWith(infile, 'parquet')) {
-      dat <- read_parquet(infile)
-    } else {
-      dat <- read_feather(infile)
-    }
-
-    dat %>%
-      select(-dataset) %>%
-      filter(padj < 0.05) %>%
-      arrange(padj)
-  })
+  # fgsea_results_combined <- reactive({
+  #   infile <- cfg()$fgsea_results_combined
+  #
+  #   if (endsWith(infile, 'parquet')) {
+  #     dat <- read_parquet(infile)
+  #   } else {
+  #     dat <- read_feather(infile)
+  #   }
+  #
+  #   dat %>%
+  #     select(-dataset) %>%
+  #     filter(padj < 0.05) %>%
+  #     arrange(padj)
+  # })
 
   fgsea_results_indiv_filtered <- reactive({
     req(input$select_fgsea_covariate)
@@ -344,18 +369,18 @@ server <- function(input, output, session) {
     dat
   })
 
-  fgsea_results_combined_filtered <- reactive({
-    req(input$select_fgsea_ranking)
-
-    dat <- fgsea_results_combined() %>%
-        filter(field == input$select_fgsea_ranking) %>%
-        select(-field)
-
-    dat$pathway <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>",
-                            dat$pathway, dat$pathway)
-
-    dat
-  })
+  # fgsea_results_combined_filtered <- reactive({
+  #   req(input$select_fgsea_ranking)
+  #
+  #   dat <- fgsea_results_combined() %>%
+  #       filter(field == input$select_fgsea_ranking) %>%
+  #       select(-field)
+  #
+  #   dat$pathway <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>",
+  #                           dat$pathway, dat$pathway)
+  #
+  #   dat
+  # })
 
   #
   # Text output
@@ -428,7 +453,21 @@ server <- function(input, output, session) {
     selectInput("select_plot_covariate", "Covariate:", choices = opts)
   })
 
+  output$select_gene_mm25_subset <- renderUI({
+    opts <- names(cfg()$mm25_scores$genes)
+    names(opts) <- Hmisc::capitalize(gsub('_', ' ', opts))
+    selectInput("select_gene_mm25_subset", "Subset:", choices = opts, selected = "all")
+  })
+
+  output$select_pathway_mm25_subset <- renderUI({
+    opts <- names(cfg()$mm25_scores$pathways)
+    names(opts) <- Hmisc::capitalize(gsub('_', ' ', opts))
+    selectInput("select_pathway_mm25_subset", "Subset:", choices = opts, selected = "all")
+  })
+
   output$fgsea_select_covariate <- renderUI({
+    message("fgsea_select_covariate()")
+
     fgsea_summary <- fgsea_summary_indiv() %>%
       select(dataset, phenotype, num_sig = num_sig_gsea) %>%
       mutate(covariate_id = sprintf("%s_%s", dataset, phenotype))
@@ -447,18 +486,24 @@ server <- function(input, output, session) {
     selectInput("select_fgsea_covariate", "Covariate:", choices = opts)
   })
 
-  output$fgsea_select_ranking <- renderUI({
-    fgsea_summary <- fgsea_summary_combined()
+  # output$fgsea_select_ranking <- renderUI({
+  #   fgsea_summary <- fgsea_summary_combined()
+  #
+  #   opts <- fgsea_summary$field
+  #
+  #   # include number of significant terms in labels
+  #   names(opts) <- sprintf("%s (#sig: %d)", opts, fgsea_summary$num_sig)
+  #
+  #   # order labels in decreasing order of functional enrichment
+  #   # opts <- opts[match(fgsea_summary$field, opts)]
+  #
+  #   selectInput("select_fgsea_ranking", "Ranking:", choices = opts)
+  # })
 
-    opts <- fgsea_summary$field
-
-    # include number of significant terms in labels
-    names(opts) <- sprintf("%s (#sig: %d)", opts, fgsea_summary$num_sig)
-
-    # order labels in decreasing order of functional enrichment
-    # opts <- opts[match(fgsea_summary$field, opts)]
-
-    selectInput("select_fgsea_ranking", "Ranking:", choices = opts)
+  output$select_fgsea_subset <- renderUI({
+    opts <- names(cfg()$mm25_fgsea$summary)
+    names(opts) <- Hmisc::capitalize(gsub('_', ' ', opts))
+    selectInput("select_fgsea_subset", "Subset (Affects Ranking Methods Only): ", choices = opts, selected = 'all')
   })
 
   rv <- reactiveValues(
@@ -516,7 +561,7 @@ server <- function(input, output, session) {
   output$mm25_gene_pvals_combined <- renderDataTable({
     req(input$select_gene_table_format)
 
-    float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_weighted"), "_pval")
+    float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_wt"), "_pval")
 
     dat <- mm25_gene_pvals_combined()
 
@@ -538,11 +583,12 @@ server <- function(input, output, session) {
   })
 
   output$mm25_pathway_pvals_combined <- renderDataTable({
+    req(input$select_pathway_mm25_subset)
     req(input$select_pathway_table_format)
     
     message("mm25_pathway_pvals_combined")
 
-    float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_weighted"), "_pval")
+    float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_wt"), "_pval")
 
     dat <- mm25_pathway_pvals_combined()
 
@@ -570,11 +616,11 @@ server <- function(input, output, session) {
         formatRound(columns = c("pval", "padj", "ES", "NES"), digits = 5)
   })
 
-  output$fgsea_results_combined <- renderDataTable({
-    DT::datatable(fgsea_results_combined_filtered(),
-                  style = "bootstrap", escape = FALSE, options = list(pageLength = 15)) %>%
-        formatRound(columns = c("pval", "padj", "ES", "NES"), digits = 5)
-  })
+  # output$fgsea_results_combined <- renderDataTable({
+  #   DT::datatable(fgsea_results_combined_filtered(),
+  #                 style = "bootstrap", escape = FALSE, options = list(pageLength = 15)) %>%
+  #       formatRound(columns = c("pval", "padj", "ES", "NES"), digits = 5)
+  # })
 
   output$fgsea_summary_table <- renderDataTable({
     req(input$select_fgsea_summary)
@@ -582,6 +628,7 @@ server <- function(input, output, session) {
     if (input$select_fgsea_summary == "Covariates") {
         dat <- fgsea_summary_indiv()
     } else {
+        req(input$select_fgsea_subset)
         dat <- fgsea_summary_combined()
     }
 
@@ -644,7 +691,7 @@ server <- function(input, output, session) {
     }
   })
 
-  output$cov_similarity_heatmap <- renderPlotly({
+  output$cov_similarity_plot <- renderPlotly({
     req(input$select_cov_similarity_feat_type)
     req(input$select_cov_similarity_cor_method)
 
@@ -676,29 +723,74 @@ server <- function(input, output, session) {
     # cov_methods <- phenotype_metadata()$method[match(cnames, dataset_ids)]
     # annot_col <- data.frame(method = factor(cov_methods))
 
-    # -log10 transform p-values
+    # -log10 transform p-values (clipping at 1-E20)
     dat[dat < 1E-20] <- 1E-20
     dat <- -log10(dat)
 
-    # generate covariate correlation matrix
-    # TODO; make -log10 transform optional..
-    cor_method <- tolower(input$select_cov_similarity_cor_method)
-    cor_mat <- cor(dat, method = cor_method, use = "pairwise.complete.obs")
+    #
+    # generate similarity plot
+    #
 
-    # row annotations
-    row_pal <- color_pal[1:3]
-    names(row_pal) <- c("survival", "treatment", "disease_stage")
+    # 1. heatmap
+    if (input$select_cov_similarity_plot_type == 'Heatmap') {
+      # generate covariate correlation matrix
+      # TODO; make -log10 transform optional..
+      cor_method <- tolower(input$select_cov_similarity_cor_method)
+      cor_mat <- cor(dat, method = cor_method, use = "pairwise.complete.obs")
 
-    # render heatmap
-    heatmaply(cor_mat, row_side_colors = annot_row, row_side_palette = row_pal,
-              heatmap_layers = heatmap_theme,
-              dendrogram_layers = list(
-                scale_color_manual(values = c("#b2b2b2", "#b2b2b2")),
-                heatmap_theme,
-                theme(panel.grid.major = element_blank(),
-                panel.grid.minor = element_blank())
-              ),
-              side_color_layers = heatmap_theme)
+      # row annotations
+      row_pal <- color_pal[1:3]
+      names(row_pal) <- c("survival", "treatment", "disease_stage")
+
+      # render heatmap
+      heatmaply(cor_mat, row_side_colors = annot_row, row_side_palette = row_pal,
+                heatmap_layers = heatmap_theme,
+                dendrogram_layers = list(
+                  scale_color_manual(values = c("#b2b2b2", "#b2b2b2")),
+                  heatmap_theme,
+                  theme(panel.grid.major = element_blank(),
+                  panel.grid.minor = element_blank())
+                ),
+                side_color_layers = heatmap_theme)
+    } else if (input$select_cov_similarity_plot_type == 'PCA') {
+      # 2. PCA plot
+
+      # first, drop rows with missing values
+      dat <- dat[complete.cases(dat), ]
+
+      pca <- prcomp(t(dat), scale = TRUE)$x[, 1:2]
+      colnames(pca) <- c("PC1", "PC2")
+
+      pca <- cbind(annot_row, pca)
+      pca$covariate <- rownames(pca)
+
+      ggplot(pca, aes(x = PC1, y = PC2, color = type, label = covariate)) +
+        geom_point() +
+        geom_text_repel() +
+        ggtitle("MM25 Covariate PCA Plot") +
+        scale_color_manual(values = color_pal) +
+        theme_dark()
+    } else if (input$select_cov_similarity_plot_type == 'UMAP') {
+      # 3. UMAP plot
+      set.seed(1)
+
+      # first, drop rows with missing values
+      dat <- dat[complete.cases(dat), ]
+
+      cov_umap <- umap(t(dat), n_neighbors = 8, scale = FALSE)
+
+      colnames(cov_umap) <- c("UMAP1", "UMAP2")
+
+      cov_umap <- cbind(annot_row, cov_umap)
+      cov_umap$covariate <- colnames(dat)
+
+      ggplot(cov_umap, aes(x = UMAP1, y = UMAP2, color = type, label = covariate)) +
+        geom_point() +
+        geom_text_repel() +
+        ggtitle("MM25 Covariate UMAP Plot") +
+        scale_color_manual(values = color_pal) +
+        theme_dark()
+    }
   })
 
   output$feature_pval_dists <- renderPlot({
@@ -747,6 +839,8 @@ server <- function(input, output, session) {
   })
 
   output$fgsea_summary_plot <- renderPlotly({
+    message("fgsea_summary_plot()")
+
     # retrieve indiv and combined fgsea results
     indiv_dat <- phenotype_metadata() %>%
       select(field = covariate_id, num_sig = num_sig_gsea)
@@ -791,14 +885,20 @@ ui <- function(request) {
 
       tabPanel(
         "Genes",
-        selectInput("select_gene_table_format", "Display:",
-                    choices = c("P-values", "Ranks"), selected = "Ranks"),
+        fluidRow(
+          column(width = 2, uiOutput("select_gene_mm25_subset")),
+          column(width = 2, selectInput("select_gene_table_format", "Display:",
+                                        choices = c("P-values", "Ranks"), selected = "Ranks"))
+        ),
         withSpinner(dataTableOutput("mm25_gene_pvals_combined"))
       ),
       tabPanel(
         "Pathways",
-        selectInput("select_pathway_table_format", "Display:",
-                    choices = c("P-values", "Ranks"), selected = "Ranks"),
+        fluidRow(
+          column(width = 2, uiOutput("select_pathway_mm25_subset")),
+          column(width = 2, selectInput("select_pathway_table_format", "Display:",
+                      choices = c("P-values", "Ranks"), selected = "Ranks")),
+        ),
         withSpinner(dataTableOutput("mm25_pathway_pvals_combined"))
       ),
       tabPanel(
@@ -837,9 +937,11 @@ ui <- function(request) {
           withSpinner(plotOutput("feature_pval_dists", height = "4000px"))
         ),
         tabPanel(
-          "Covariate Similarity",
+          "Covariate Similarity Plot",
           column(
             width = 3,
+            selectInput("select_cov_similarity_plot_type", "Plot type:",
+                        choices = c("Heatmap", "PCA", "UMAP"), selected = "PCA"),
             selectInput("select_cov_similarity_feat_type", "Feature type:",
                         choices = c("Genes", "Pathways"), selected = "Genes"),
             selectInput("select_cov_similarity_cor_method", "Correlation type:",
@@ -847,26 +949,41 @@ ui <- function(request) {
           ),
           column(
             width = 9,
-            withSpinner(plotlyOutput("cov_similarity_heatmap", height = "800px"))
+            withSpinner(plotlyOutput("cov_similarity_plot", height = "800px"))
           )
         )
       ),
       navbarMenu(
         "Functional Enrichment",
         tabPanel(
-          "Phenotypes",
+          "Phenotypes (P-values)",
           uiOutput("fgsea_select_covariate"),
           withSpinner(dataTableOutput("fgsea_results_indiv"))
         ),
-        tabPanel(
-          "MM25 Rankings",
-          uiOutput("fgsea_select_ranking"),
-          withSpinner(dataTableOutput("fgsea_results_combined"))
-        ),
+
+        #
+        # May 27, 2020: 
+        #
+        # Disabling this section for now until refactoring can be performed and it can
+        # be more easily extended to support MM25 category/cluster subsets.
+        #
+        # tabPanel(
+        #   "MM25 Rankings",
+        #   # uiOutput("fgsea_select_ranking"),
+        #   fluidRow(
+        #     column(width = 2, uiOutput("select_fgsea_subset")),
+        #     column(width = 2, uiOutput("fgsea_select_ranking"))
+        #   ),
+        #   withSpinner(dataTableOutput("fgsea_results_combined"))
+        # ),
         tabPanel(
           "Summary",
-          selectInput("select_fgsea_summary", "Display: ",
-                      choices = c("Covariates", "Ranking Methods")),
+          fluidRow(
+            column(width = 2,
+                   selectInput("select_fgsea_summary", "Display: ",
+                               choices = c("Covariates", "Ranking Methods"))),
+            column(width = 2, uiOutput("select_fgsea_subset"))
+          ),
           fluidRow(
             column(
               width = 6,
