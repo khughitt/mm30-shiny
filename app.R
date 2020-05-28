@@ -106,8 +106,18 @@ server <- function(input, output, session) {
     # dat$covariate_id <- sprintf("%s_%s_pval", dat$dataset, dat$phenotype)
     dat$covariate_id <- sprintf("%s_%s", dat$dataset, dat$phenotype)
 
-    # add association category
+    # add covariate category
     dat$category <- factor(dat$category)
+
+    # add covariate cluster
+    covariate_clusters <- read_feather(cfg()$phenotype_clusters) %>%
+      rename(covariate_id = covariate)
+
+    dat <- dat %>%
+      inner_join(covariate_clusters, by = 'covariate_id')
+
+    # offset by one so that first cluster is "cluster 1" and convert to a factor
+    dat$cluster <- factor(dat$cluster + 1)
 
     # get the number of genes and samples in processed expression data
     num_genes   <- lapply(gene_data(), nrow)
@@ -713,7 +723,9 @@ server <- function(input, output, session) {
     dataset_ids <- paste(phenotype_metadata()$dataset,
                          phenotype_metadata()$phenotype, sep="_")
     cov_categories <- phenotype_metadata()$category[match(cnames, dataset_ids)]
+    cov_clusters   <- phenotype_metadata()$cluster[match(cnames, dataset_ids)]
     annot_row <- data.frame(type = factor(cov_categories))
+    annot_col <- data.frame(cluster = cov_clusters)
 
     # cov_categories <- rep("", ncol(dat) - 1)
     # cov_categories[grepl("survival|died", cnames)] <- "survival"
@@ -744,6 +756,7 @@ server <- function(input, output, session) {
 
       # render heatmap
       heatmaply(cor_mat, row_side_colors = annot_row, row_side_palette = row_pal,
+                col_side_colors = annot_col,
                 heatmap_layers = heatmap_theme,
                 dendrogram_layers = list(
                   scale_color_manual(values = c("#b2b2b2", "#b2b2b2")),
@@ -761,13 +774,14 @@ server <- function(input, output, session) {
       pca <- prcomp(t(dat), scale = TRUE)$x[, 1:2]
       colnames(pca) <- c("PC1", "PC2")
 
-      pca <- cbind(annot_row, pca)
+      pca <- cbind(annot_row, annot_col, pca)
       pca$covariate <- rownames(pca)
 
-      ggplot(pca, aes(x = PC1, y = PC2, color = type, label = covariate)) +
-        geom_point() +
+      ggplot(pca, aes(x = PC1, y = PC2, color = type, shape = cluster, label = covariate)) +
+        geom_point(size = 3) +
         geom_text_repel() +
         ggtitle("MM25 Covariate PCA Plot") +
+        scale_shape_manual(values = c(1, 15)) +
         scale_color_manual(values = color_pal) +
         theme_dark()
     } else if (input$select_cov_similarity_plot_type == 'UMAP') {
@@ -781,13 +795,14 @@ server <- function(input, output, session) {
 
       colnames(cov_umap) <- c("UMAP1", "UMAP2")
 
-      cov_umap <- cbind(annot_row, cov_umap)
+      cov_umap <- cbind(annot_row, annot_col, cov_umap)
       cov_umap$covariate <- colnames(dat)
 
-      ggplot(cov_umap, aes(x = UMAP1, y = UMAP2, color = type, label = covariate)) +
-        geom_point() +
+      ggplot(cov_umap, aes(x = UMAP1, y = UMAP2, color = type, shape = cluster, label = covariate)) +
+        geom_point(size = 3) +
         geom_text_repel() +
         ggtitle("MM25 Covariate UMAP Plot") +
+        scale_shape_manual(values = c(1, 15)) +
         scale_color_manual(values = color_pal) +
         theme_dark()
     }
@@ -998,7 +1013,8 @@ ui <- function(request) {
       ),
       tabPanel(
         "Settings",
-        selectInput("select_version", "Version:", choices=c("v1.0", "v1.1", "v1.2", "v1.3", "v2.0"), selected = "v2.0")
+        # selectInput("select_version", "Version:", choices=c("v1.0", "v1.1", "v1.2", "v1.3", "v2.0"), selected = "v2.0")
+        selectInput("select_version", "Version:", choices=c("v2.0"), selected = "v2.0")
       )
     )
   )
