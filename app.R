@@ -270,7 +270,13 @@ server <- function(input, output, session) {
     for (dataset in names(dataset_cfgs())) {
       dataset_cfg <- dataset_cfgs()[[dataset]]
 
-      infile <- dataset_cfg$phenotypes$path
+      dataset_id <- unlist(str_split(dataset, "_"))[1]
+      pheno <- sub("_pval", "", sub(paste0(dataset_id, "_"), "", dataset))
+
+      # infile <- dataset_cfg$phenotypes$path
+      infile <- phenotype_metadata() %>%
+        filter(dataset == dataset_id & phenotype == pheno) %>%
+        pull(phenotype_path)
 
       if (endsWith(infile, "tsv") || endsWith(infile, "tsv.gz")) {
         dat[[dataset]] <- read_tsv(infile, col_types = cols())
@@ -660,44 +666,48 @@ server <- function(input, output, session) {
     pheno <- sub("_pval", "", pheno)
 
     # get dataset and covariate names
-    dataset <- unlist(str_split(pheno, "_"))[1]
-    covariate <- sub(paste0(dataset, "_"), "", pheno)
+    dataset_id <- unlist(str_split(pheno, "_"))[1]
+    covariate <- sub(paste0(dataset_id, "_"), "", pheno)
 
     # feature data
     if (rv$select_plot_feature_level == 'genes') {
-      feat_dat <- gene_data()[[dataset]] %>%
+      feat_dat <- gene_data()[[dataset_id]] %>%
         filter(symbol == rv$select_plot_feature) %>%
         select(-symbol) %>%
         as.numeric()
     } else {
-      feat_dat <- pathway_data()[[dataset]] %>%
+      feat_dat <- pathway_data()[[dataset_id]] %>%
         filter(gene_set == rv$select_plot_feature) %>%
         select(-gene_set) %>%
         as.numeric()
     }
 
     # get config for selected feature-phenotype association
-    assoc_cfg <- dataset_cfgs()[[dataset]]$phenotypes$associations[[covariate]]
-    assoc_method <- assoc_cfg$method
+    # assoc_cfg <- dataset_cfgs()[[dataset_id]]$phenotypes$associations[[covariate]]
+    # assoc_method <- assoc_cfg$method
+
+    assoc_method <- phenotype_metadata() %>%
+      filter(dataset == dataset_id & phenotype == pheno) %>%
+      pull(method)
 
     if (assoc_method == "survival") {
       # survival plot
-      pheno_dat <- pheno_data()[[dataset]]
+      pheno_dat <- pheno_data()[[dataset_id]]
 
       time_dat <- pull(pheno_dat, assoc_cfg$params$time)
       event_dat <- pull(pheno_dat, assoc_cfg$params$event)
 
       dat <- data.frame(feature = feat_dat, time = time_dat, event = event_dat)
 
-      plot_survival(dat, dataset, covariate, rv$select_plot_feature,
+      plot_survival(dat, dataset_id, covariate, rv$select_plot_feature,
                     input$select_survival_expr_cutoffs, color_pal, theme_dark)
     } else {
       # violin plot
-      response <- factor(pull(pheno_data()[[dataset]], assoc_cfg$params$field))
+      response <- factor(pull(pheno_data()[[dataset_id]], assoc_cfg$params$field))
 
       dat <- data.frame(feature = feat_dat, response)
 
-      plot_categorical(dat, dataset, covariate, rv$select_plot_feature, color_pal, theme_dark)
+      plot_categorical(dat, dataset_id, covariate, rv$select_plot_feature, color_pal, theme_dark)
     }
   })
 
@@ -739,6 +749,13 @@ server <- function(input, output, session) {
     dat[dat < 1E-20] <- 1E-20
     dat <- -log10(dat)
 
+    # dataset category color palette
+    category_pal <- color_pal[1:3]
+    names(category_pal) <- c("survival", "treatment", "disease_stage")
+
+    # cluster shapes to use
+    cluster_shapes <- c(1, 15, 2, 16, 17)[1:length(unique(cov_clusters))]
+
     #
     # generate similarity plot
     #
@@ -750,12 +767,9 @@ server <- function(input, output, session) {
       cor_method <- tolower(input$select_cov_similarity_cor_method)
       cor_mat <- cor(dat, method = cor_method, use = "pairwise.complete.obs")
 
-      # row annotations
-      row_pal <- color_pal[1:3]
-      names(row_pal) <- c("survival", "treatment", "disease_stage")
 
       # render heatmap
-      heatmaply(cor_mat, row_side_colors = annot_row, row_side_palette = row_pal,
+      heatmaply(cor_mat, row_side_colors = annot_row, row_side_palette = category_pal,
                 col_side_colors = annot_col,
                 heatmap_layers = heatmap_theme,
                 dendrogram_layers = list(
@@ -781,8 +795,8 @@ server <- function(input, output, session) {
         geom_point(size = 3) +
         geom_text_repel() +
         ggtitle("MM25 Covariate PCA Plot") +
-        scale_shape_manual(values = c(1, 15)) +
-        scale_color_manual(values = color_pal) +
+        scale_shape_manual(values = cluster_shapes) +
+        scale_color_manual(values = category_pal) +
         theme_dark()
     } else if (input$select_cov_similarity_plot_type == 'UMAP') {
       # 3. UMAP plot
@@ -802,8 +816,8 @@ server <- function(input, output, session) {
         geom_point(size = 3) +
         geom_text_repel() +
         ggtitle("MM25 Covariate UMAP Plot") +
-        scale_shape_manual(values = c(1, 15)) +
-        scale_color_manual(values = color_pal) +
+        scale_shape_manual(values = cluster_shapes) +
+        scale_color_manual(values = category_pal) +
         theme_dark()
     }
   })
@@ -994,10 +1008,10 @@ ui <- function(request) {
         tabPanel(
           "Summary",
           fluidRow(
-            column(width = 2,
+            column(width = 3,
                    selectInput("select_fgsea_summary", "Display: ",
                                choices = c("Covariates", "Ranking Methods"))),
-            column(width = 2, uiOutput("select_fgsea_subset"))
+            column(width = 3, uiOutput("select_fgsea_subset"))
           ),
           fluidRow(
             column(
@@ -1014,7 +1028,7 @@ ui <- function(request) {
       tabPanel(
         "Settings",
         # selectInput("select_version", "Version:", choices=c("v1.0", "v1.1", "v1.2", "v1.3", "v2.0"), selected = "v2.0")
-        selectInput("select_version", "Version:", choices=c("v2.0"), selected = "v2.0")
+        selectInput("select_version", "Version:", choices=c("v2.0", "v2.1", "v2.2", "v2.3"), selected = "v2.0")
       )
     )
   )
