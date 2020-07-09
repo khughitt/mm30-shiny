@@ -16,7 +16,7 @@ pathway_pvals_indiv: '/data/nih/fassoc/mm25/2.0/merged/mm25_pathway_association_
 fgsea_results_indiv: '/data/nih/fgsea/mm25/2.0/results/merged/mm25_gene_association_pvals.feather'
 fgsea_summary_indiv: '/data/nih/fgsea/mm25/2.0/results/summary/mm25_gene_association_pvals_summary.tsv'
 
-# mm25 scores / fgsea results
+# mm25 scores
 mm25_scores:
   genes:
     all: '/data/nih/mm25/2.0/results/all/mm25_gene_scores.feather'
@@ -33,6 +33,7 @@ mm25_scores:
     cluster1: '/data/nih/mm25/2.0/results/clusters/mm25_pathway_0_scores.feather'
     cluster2: '/data/nih/mm25/2.0/results/clusters/mm25_pathway_1_scores.feather'
 
+# mm25 fgsea results
 mm25_fgsea:
   pvalues:
     all: '/data/nih/fgsea/mm25/2.0/results/merged/mm25_gene_scores.feather'
@@ -49,8 +50,3 @@ mm25_fgsea:
     cluster1: '/data/nih/fgsea/mm25/2.0/results/summary/mm25_gene_0_scores_summary.tsv'
     cluster2: '/data/nih/fgsea/mm25/2.0/results/summary/mm25_gene_1_scores_summary.tsv'
 
-# gene_pvals_combined: '/data/nih/mm25/2.0/results/all/mm25_gene_scores.feather'
-# pathway_pvals_combined: '/data/nih/mm25/2.0/results/all/mm25_pathway_scores.feather'
-#
-# fgsea_results_combined: '/data/nih/fgsea/mm25/2.0/results/merged/mm25_gene_scores.feather'
-# fgsea_summary_combined: '/data/nih/fgsea/mm25/2.0/results/summary/mm25_gene_scores_summary.tsv'

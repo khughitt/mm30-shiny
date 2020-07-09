@@ -15,6 +15,7 @@ library(ggforce)
 library(ggrepel)
 library(gridExtra)
 library(heatmaply)
+library(Hmisc)
 library(plotly)
 library(shinythemes)
 library(shinycssloaders)
@@ -267,21 +268,14 @@ server <- function(input, output, session) {
   pheno_data <- reactive({
     dat <- list()
 
-    for (dataset in names(dataset_cfgs())) {
-      dataset_cfg <- dataset_cfgs()[[dataset]]
-
-      dataset_id <- unlist(str_split(dataset, "_"))[1]
-      pheno <- sub("_pval", "", sub(paste0(dataset_id, "_"), "", dataset))
-
-      # infile <- dataset_cfg$phenotypes$path
-      infile <- phenotype_metadata() %>%
-        filter(dataset == dataset_id & phenotype == pheno) %>%
-        pull(phenotype_path)
+    for (dataset_id in names(dataset_cfgs())) {
+      dataset_cfg <- dataset_cfgs()[[dataset_id]]
+      infile <- dataset_cfg$phenotypes$path
 
       if (endsWith(infile, "tsv") || endsWith(infile, "tsv.gz")) {
-        dat[[dataset]] <- read_tsv(infile, col_types = cols())
+        dat[[dataset_id]] <- read_tsv(infile, col_types = cols())
       } else if (endsWith(infile, "feather")) {
-        dat[[dataset]] <- read_feather(infile)
+        dat[[dataset_id]] <- read_feather(infile)
       }
     }
 
@@ -407,7 +401,7 @@ server <- function(input, output, session) {
   })
 
   #
-  # HTML output
+  # html output
   #
   output$covariate_summary <- renderUI({
     pheno_mdata <- selected_phenotype_metadata()
@@ -457,14 +451,12 @@ server <- function(input, output, session) {
     # select choices (e.g. "MMRF IA14 overall survival (p = 0.003)")
     opts <- selected_feature_pvals()$phenotype
 
+    # remove dataset id prefix from covariate field
+    # opts <- str_replace(opts, "[a-zA-Z0-9]+_", "")
+
     names(opts) <- sprintf("%s (padj = %0.3f)",
                            gsub("_", " ", sub("_pval", "", dat$phenotype)),
                            dat$padj)
-
-    # cat("SELECT_PLOT_COVARIATE:\n")
-    # cat(paste0(rv$select_plot_feature, '\n'))
-    # cat(opts)
-    # cat('\n')
 
     selectInput("select_plot_covariate", "Covariate:", choices = opts)
   })
@@ -683,12 +675,12 @@ server <- function(input, output, session) {
     }
 
     # get config for selected feature-phenotype association
-    # assoc_cfg <- dataset_cfgs()[[dataset_id]]$phenotypes$associations[[covariate]]
-    # assoc_method <- assoc_cfg$method
+    assoc_cfg <- dataset_cfgs()[[dataset_id]]$phenotypes$associations[[covariate]]
+    assoc_method <- assoc_cfg$method
 
-    assoc_method <- phenotype_metadata() %>%
-      filter(dataset == dataset_id & phenotype == pheno) %>%
-      pull(method)
+    # assoc_method <- phenotype_metadata() %>%
+    #   filter(dataset == dataset_id & phenotype == covariate) %>%
+    #   pull(method)
 
     if (assoc_method == "survival") {
       # survival plot
@@ -770,7 +762,7 @@ server <- function(input, output, session) {
 
       # render heatmap
       heatmaply(cor_mat, row_side_colors = annot_row, row_side_palette = category_pal,
-                col_side_colors = annot_col,
+                col_side_colors = annot_col, width = 1200, height = 1400,
                 heatmap_layers = heatmap_theme,
                 dendrogram_layers = list(
                   scale_color_manual(values = c("#b2b2b2", "#b2b2b2")),
@@ -1027,8 +1019,7 @@ ui <- function(request) {
       ),
       tabPanel(
         "Settings",
-        # selectInput("select_version", "Version:", choices=c("v1.0", "v1.1", "v1.2", "v1.3", "v2.0"), selected = "v2.0")
-        selectInput("select_version", "Version:", choices=c("v2.0", "v2.1", "v2.2", "v2.3"), selected = "v2.0")
+        selectInput("select_version", "Version:", choices=c("v2.0", "v2.1"), selected = "v2.0")
       )
     )
   )
