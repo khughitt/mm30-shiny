@@ -146,22 +146,10 @@ server <- function(input, output, session) {
   })
 
   # load MM25 combined pvals
-  # mm25_gene_pvals_combined <- reactive({
-  #   req(input$select_version_subset)
-  #
-  #   message("mm25_gene_pvals_combined()")
-  #
-  #   infile <- cfg()$mm25_scores$genes[[input$select_version_subset]]
-  #
-  #   read_feather(infile) %>%
-  #     select(symbol, sumz_wt_pval, sumz_pval, sumlog_pval, min_pval, num_present, num_missing)
-  # })
   mm25_gene_pvals_combined <- eventReactive(input$select_version_subset, {
     message("mm25_gene_pvals_combined()")
 
-    # browser()
-
-    infile <- cfg()$mm25_scores$genes[[rv$version_subset]]
+    infile <- cfg()$mm25_scores$genes[[input$select_version_subset]]
 
     read_feather(infile) %>%
       select(symbol, sumz_wt_pval, sumz_pval, sumlog_pval, min_pval, num_present, num_missing)
@@ -520,7 +508,7 @@ server <- function(input, output, session) {
   })
 
   rv <- reactiveValues(
-    version_subset = NULL,
+    # version_subset = NULL,
     plot_feature_level = NULL,
     plot_feature = NULL,
     plot_covariate = NULL
@@ -542,14 +530,9 @@ server <- function(input, output, session) {
     # reset form fields when version changes
     message("observeEvent(input$select_version)")
 
-    # browser()
-
     opts <- names(cfg()$mm25_scores$genes)
     names(opts) <- Hmisc::capitalize(gsub('_', ' ', opts))
 
-    rv$version_subset <- "all"
-
-    # selectInput("select_version_subset", "Subset:", choices = opts, selected = "all")
     updateSelectInput(session, "select_version_subset", "Subset:",
                       choices = opts, selected = "all")
   })
@@ -557,7 +540,6 @@ server <- function(input, output, session) {
   observeEvent(input$select_version_subset, {
     req(input$select_version)
 
-    rv$version_subset <- input$select_version_subset 
     rv$plot_feature_level <- "genes"
 
     message("observeEvent(input$select_version_subset)")
