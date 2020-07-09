@@ -146,21 +146,31 @@ server <- function(input, output, session) {
   })
 
   # load MM25 combined pvals
-  mm25_gene_pvals_combined <- reactive({
-    req(input$select_gene_mm25_subset)
-
+  # mm25_gene_pvals_combined <- reactive({
+  #   req(input$select_version_subset)
+  #
+  #   message("mm25_gene_pvals_combined()")
+  #
+  #   infile <- cfg()$mm25_scores$genes[[input$select_version_subset]]
+  #
+  #   read_feather(infile) %>%
+  #     select(symbol, sumz_wt_pval, sumz_pval, sumlog_pval, min_pval, num_present, num_missing)
+  # })
+  mm25_gene_pvals_combined <- eventReactive(input$select_version_subset, {
     message("mm25_gene_pvals_combined()")
 
-    infile <- cfg()$mm25_scores$genes[[input$select_gene_mm25_subset]]
+    # browser()
+
+    infile <- cfg()$mm25_scores$genes[[rv$version_subset]]
 
     read_feather(infile) %>%
       select(symbol, sumz_wt_pval, sumz_pval, sumlog_pval, min_pval, num_present, num_missing)
   })
 
   mm25_pathway_pvals_combined <- reactive({
-    req(input$select_pathway_mm25_subset)
+    req(input$select_version_subset)
 
-    infile <- cfg()$mm25_scores$pathways[[input$select_pathway_mm25_subset]]
+    infile <- cfg()$mm25_scores$pathways[[input$select_version_subset]]
 
     dat <- read_feather(infile)
 
@@ -188,7 +198,7 @@ server <- function(input, output, session) {
   mm25_feature_pvals <- reactive({
     message("mm25_feature_pvals()")
 
-    if (rv$select_plot_feature_level == 'genes') {
+    if (rv$plot_feature_level == 'genes') {
       dat <- mm25_gene_pvals_indiv() %>%
         rename(feature_id = symbol)
     } else {
@@ -283,9 +293,9 @@ server <- function(input, output, session) {
   })
 
   selected_feature_pvals <- reactive({
-    req(rv$select_plot_feature)
+    req(rv$plot_feature)
 
-    mask <- mm25_feature_pvals()$feature_id == rv$select_plot_feature
+    mask <- mm25_feature_pvals()$feature_id == rv$plot_feature
 
     dat <- tibble(
       phenotype = covariate_ids(),
@@ -298,11 +308,11 @@ server <- function(input, output, session) {
   })
 
   selected_phenotype_metadata <- reactive({
-    req(rv$select_plot_covariate)
+    req(rv$plot_covariate)
 
     # determine selected dataset / covariate
-    dataset_id <- unlist(str_split(rv$select_plot_covariate, "_"))[1]
-    pheno <- sub("_pval", "", sub(paste0(dataset_id, "_"), "", rv$select_plot_covariate))
+    dataset_id <- unlist(str_split(rv$plot_covariate, "_"))[1]
+    pheno <- sub("_pval", "", sub(paste0(dataset_id, "_"), "", rv$plot_covariate))
 
     # retrieve relevant metadata
     phenotype_metadata() %>%
@@ -444,7 +454,7 @@ server <- function(input, output, session) {
   # Form fields
   #
   output$select_plot_covariate <- renderUI({
-    req(rv$select_plot_feature)
+    req(rv$plot_feature)
 
     dat <- selected_feature_pvals()
 
@@ -461,17 +471,12 @@ server <- function(input, output, session) {
     selectInput("select_plot_covariate", "Covariate:", choices = opts)
   })
 
-  output$select_gene_mm25_subset <- renderUI({
-    opts <- names(cfg()$mm25_scores$genes)
-    names(opts) <- Hmisc::capitalize(gsub('_', ' ', opts))
-    selectInput("select_gene_mm25_subset", "Subset:", choices = opts, selected = "all")
-  })
-
-  output$select_pathway_mm25_subset <- renderUI({
-    opts <- names(cfg()$mm25_scores$pathways)
-    names(opts) <- Hmisc::capitalize(gsub('_', ' ', opts))
-    selectInput("select_pathway_mm25_subset", "Subset:", choices = opts, selected = "all")
-  })
+  # output$select_version_subset <- renderUI({
+  #   message("output$select_version_subset")
+  #   opts <- names(cfg()$mm25_scores$genes)
+  #   names(opts) <- Hmisc::capitalize(gsub('_', ' ', opts))
+  #   selectInput("select_version_subset", "Subset:", choices = opts, selected = "all")
+  # })
 
   output$fgsea_select_covariate <- renderUI({
     message("fgsea_select_covariate()")
@@ -515,37 +520,88 @@ server <- function(input, output, session) {
   })
 
   rv <- reactiveValues(
-    select_plot_feature_level = NULL,
-    select_plot_feature = NULL,
-    select_plot_covariate = NULL
+    version_subset = NULL,
+    plot_feature_level = NULL,
+    plot_feature = NULL,
+    plot_covariate = NULL
   )
 
+  #
+  # Manually setup / trigger select_version event
+  #
+  updateSelectInput(session, "select_version", "Version:", choices=c("v2.0", "v2.1"), selected = "v2.0")
+
+  #
+  # Event Hanlders
+  #
+
+  # 1. version subset
   observeEvent(input$select_version, {
+    req(cfg())
+
     # reset form fields when version changes
-    updateSelectInput(session, "select_plot_feature_level", "Feature Level:", 
+    message("observeEvent(input$select_version)")
+
+    # browser()
+
+    opts <- names(cfg()$mm25_scores$genes)
+    names(opts) <- Hmisc::capitalize(gsub('_', ' ', opts))
+
+    rv$version_subset <- "all"
+
+    # selectInput("select_version_subset", "Subset:", choices = opts, selected = "all")
+    updateSelectInput(session, "select_version_subset", "Subset:",
+                      choices = opts, selected = "all")
+  })
+
+  observeEvent(input$select_version_subset, {
+    req(input$select_version)
+
+    rv$version_subset <- input$select_version_subset 
+    rv$plot_feature_level <- "genes"
+
+    message("observeEvent(input$select_version_subset)")
+    
+    updateSelectInput(session, "select_plot_feature_level", "Feature Level:",
                       choices = feature_levels, selected = "genes")
   })
 
+  # observeEvent(input$select_version_subset, {
   observeEvent(input$select_plot_feature_level, {
-    rv$select_plot_feature <- NULL
-    rv$select_plot_covariate <- NULL
-    rv$select_plot_feature_level <- input$select_plot_feature_level 
+    req(input$select_version_subset)
+
+    rv$plot_feature <- NULL
+    rv$plot_covariate <- NULL
+
+    if (input$select_plot_feature_level != "") {
+      rv$plot_feature_level <- input$select_plot_feature_level
+    }
 
     message("observeEvent(input$select_plot_feature_level)")
 
-    if (rv$select_plot_feature_level == "genes") {
+
+    if (rv$plot_feature_level == "genes") {
       select_choices <- as.character(mm25_gene_pvals_combined()$symbol)
     } else {
       select_choices <- as.character(mm25_pathway_pvals_combined()$gene_set)
     }
 
-    updateSelectizeInput(session, "select_plot_feature", choices = select_choices,
-                         server = TRUE)
+    updateSelectizeInput(session, "select_plot_feature", choices = select_choices, server = TRUE)
+  })
+
+
+  observeEvent(input$select_plot_covariate, {
+    message("observeEvent(input$select_plot_covariate)")
+    rv$plot_covariate <- input$select_plot_covariate 
   })
 
   observeEvent(input$select_plot_feature, {
-    rv$select_plot_covariate <- NULL
-    rv$select_plot_feature <- input$select_plot_feature
+    req(input$select_plot_feature_level)
+
+    rv$plot_covariate <- NULL
+    rv$plot_feature <- input$select_plot_feature
+
+    message("observeEvent(input$select_plot_feature)")
 
     # dat <- selected_feature_pvals()
     #
@@ -559,22 +615,19 @@ server <- function(input, output, session) {
     # updateSelectInput(session, "select_plot_covariate", "Covariate:", choices = opts)
   })
 
-  observeEvent(input$select_plot_covariate, {
-    rv$select_plot_covariate <- input$select_plot_covariate 
-  })
-
   #
   # Tables
   #
-  output$mm25_gene_pvals_combined <- renderDataTable({
-    req(input$select_gene_table_format)
+  output$mm25_gene_pvals_combined_table <- renderDataTable({
+    req(input$select_version_subset)
+    req(input$select_table_format)
 
     float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_wt"), "_pval")
 
     dat <- mm25_gene_pvals_combined()
 
     # convert to ranks, if requested
-    if (input$select_gene_table_format == "Ranks") {
+    if (input$select_table_format == "Ranks") {
       dat <- dat %>%
         mutate_at(vars(ends_with("_pval")), dense_rank)
     }
@@ -582,7 +635,7 @@ server <- function(input, output, session) {
     # construct data table
     out <- DT::datatable(dat, style = "bootstrap", options = list(pageLength = 15))
 
-    if (input$select_gene_table_format == "P-values") {
+    if (input$select_table_format == "P-values") {
       out <- out %>%
         formatRound(columns = float_cols, digits = 5)
     }
@@ -590,11 +643,11 @@ server <- function(input, output, session) {
     out
   })
 
-  output$mm25_pathway_pvals_combined <- renderDataTable({
-    req(input$select_pathway_mm25_subset)
+  output$mm25_pathway_pvals_combined_table <- renderDataTable({
+    req(input$select_version_subset)
     req(input$select_pathway_table_format)
     
-    message("mm25_pathway_pvals_combined")
+    message("mm25_pathway_pvals_combined_table")
 
     float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_wt"), "_pval")
 
@@ -647,12 +700,12 @@ server <- function(input, output, session) {
   # Plots
   #
   output$feature_plot <- renderPlot({
-    req(rv$select_plot_covariate)
+    req(rv$plot_covariate)
     req(input$select_survival_expr_cutoffs)
 
     message("feature_plot")
 
-    pheno <- rv$select_plot_covariate
+    pheno <- rv$plot_covariate
 
     # backwards-compatibility
     pheno <- sub("_pval", "", pheno)
@@ -662,14 +715,14 @@ server <- function(input, output, session) {
     covariate <- sub(paste0(dataset_id, "_"), "", pheno)
 
     # feature data
-    if (rv$select_plot_feature_level == 'genes') {
+    if (rv$plot_feature_level == 'genes') {
       feat_dat <- gene_data()[[dataset_id]] %>%
-        filter(symbol == rv$select_plot_feature) %>%
+        filter(symbol == rv$plot_feature) %>%
         select(-symbol) %>%
         as.numeric()
     } else {
       feat_dat <- pathway_data()[[dataset_id]] %>%
-        filter(gene_set == rv$select_plot_feature) %>%
+        filter(gene_set == rv$plot_feature) %>%
         select(-gene_set) %>%
         as.numeric()
     }
@@ -691,7 +744,7 @@ server <- function(input, output, session) {
 
       dat <- data.frame(feature = feat_dat, time = time_dat, event = event_dat)
 
-      plot_survival(dat, dataset_id, covariate, rv$select_plot_feature,
+      plot_survival(dat, dataset_id, covariate, rv$plot_feature,
                     input$select_survival_expr_cutoffs, color_pal, theme_dark)
     } else {
       # violin plot
@@ -699,7 +752,7 @@ server <- function(input, output, session) {
 
       dat <- data.frame(feature = feat_dat, response)
 
-      plot_categorical(dat, dataset_id, covariate, rv$select_plot_feature, color_pal, theme_dark)
+      plot_categorical(dat, dataset_id, covariate, rv$plot_feature, color_pal, theme_dark)
     }
   })
 
@@ -906,29 +959,18 @@ ui <- function(request) {
 
       tabPanel(
         "Genes",
-        fluidRow(
-          column(width = 2, uiOutput("select_gene_mm25_subset")),
-          column(width = 2, selectInput("select_gene_table_format", "Display:",
-                                        choices = c("P-values", "Ranks"), selected = "Ranks"))
-        ),
-        withSpinner(dataTableOutput("mm25_gene_pvals_combined"))
+        withSpinner(dataTableOutput("mm25_gene_pvals_combined_table"))
       ),
       tabPanel(
         "Pathways",
-        fluidRow(
-          column(width = 2, uiOutput("select_pathway_mm25_subset")),
-          column(width = 2, selectInput("select_pathway_table_format", "Display:",
-                      choices = c("P-values", "Ranks"), selected = "Ranks")),
-        ),
-        withSpinner(dataTableOutput("mm25_pathway_pvals_combined"))
+        withSpinner(dataTableOutput("mm25_pathway_pvals_combined_table"))
       ),
       tabPanel(
         "Visualize",
         fluidRow(
           column(
             width = 4,
-            selectInput("select_plot_feature_level", "Feature Level:", 
-                          choices = feature_levels, selected = "genes"),
+            selectInput("select_plot_feature_level", "Feature Level:", choices = NULL),
             helpText("Feature level to visualize."),
             hr(),
             selectizeInput("select_plot_feature", "Feature:", choices = NULL),
@@ -1019,7 +1061,10 @@ ui <- function(request) {
       ),
       tabPanel(
         "Settings",
-        selectInput("select_version", "Version:", choices=c("v2.0", "v2.1"), selected = "v2.0")
+        # selectInput("select_version", "Version:", choices=c("v2.0", "v2.1"), selected = "v2.0"),
+        selectInput("select_version", "Version:", choices = NULL),
+        selectInput("select_version_subset", "Subset:", choices = NULL),
+        selectInput("select_table_format", "Display:", choices = c("P-values", "Ranks"), selected = "Ranks")
       )
     )
   )
