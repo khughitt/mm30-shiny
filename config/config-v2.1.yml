@@ -3,16 +3,16 @@
 #
 
 # dataset config dir
-dataset_cfg_dir: '~/d/r/nih/fassoc/datasets/mm25/2.0'
+dataset_cfg_dir: '~/d/r/nih/fassoc/datasets/mm25/2.1'
 
 # metadata
 dataset_metadata: '/data/human/geo/metadata.tsv'
-phenotype_metadata: '/data/nih/fassoc/mm25/2.0/metadata/association_metadata.feather'
+phenotype_metadata: '/data/nih/fassoc/mm25/2.1/metadata/association_metadata.feather'
 phenotype_clusters: '/data/nih/mm25/2.1/clusters/mm25_gene_covariate_clusters.feather'
 
 # individual covariate p-values / fgsea results
-gene_pvals_indiv: '/data/nih/fassoc/mm25/2.0/merged/mm25_gene_association_pvals.feather'
-pathway_pvals_indiv: '/data/nih/fassoc/mm25/2.0/merged/mm25_pathway_association_pvals.feather'
+gene_pvals_indiv: '/data/nih/fassoc/mm25/2.1/merged/mm25_gene_association_pvals.feather'
+pathway_pvals_indiv: '/data/nih/fassoc/mm25/2.1/merged/mm25_pathway_association_pvals.feather'
 fgsea_results_indiv: '/data/nih/fgsea/mm25/2.1/results/merged/mm25_gene_association_pvals.feather'
 fgsea_summary_indiv: '/data/nih/fgsea/mm25/2.1/results/summary/mm25_gene_association_pvals_summary.tsv'
 

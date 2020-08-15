@@ -8,6 +8,7 @@
 # - simplify by renaming symbol/pathway to "feature_id"?
 # - color gene symbols by pubmed counts, etc.?
 #
+library(annotables)
 library(arrow)
 library(DT)
 library(ggdark)
@@ -173,13 +174,13 @@ server <- function(input, output, session) {
       add_column(pathway = msigdb_links, .before = 1) %>%
       select(pathway, gene_set, sumz_wt_pval, sumz_pval, sumlog_pval, min_pval, num_present, num_missing)
   })
-  
+
   mm25_gene_pvals_indiv <- reactive({
-    read_feather(cfg()$gene_pvals_indiv) 
+    read_feather(cfg()$gene_pvals_indiv)
   })
 
   mm25_pathway_pvals_indiv <- reactive({
-    read_feather(cfg()$pathway_pvals_indiv) 
+    read_feather(cfg()$pathway_pvals_indiv)
   })
 
   # individual dataset p-values
@@ -226,6 +227,8 @@ server <- function(input, output, session) {
   # load individual dataset gene expression data;
   # used to generate gene-level feature vs. phenotype plots
   gene_data <- reactive({
+    message("gene_data()")
+
     gene_infiles <- lapply(dataset_cfgs(), function(x) {
       x$features$genes$rna
     })
@@ -238,6 +241,11 @@ server <- function(input, output, session) {
     names(dat) <- names(dataset_cfgs())
 
     dat
+  })
+
+  # list of all gene symbols
+  all_genes <- reactive({
+    sort(unique(unlist(lapply(gene_data(), '[', 'symbol'))))
   })
 
   # load individual dataset gene expression data;
@@ -517,7 +525,17 @@ server <- function(input, output, session) {
   #
   # Manually setup / trigger select_version event
   #
-  updateSelectInput(session, "select_version", "Version:", choices=c("v2.0", "v2.1"), selected = "v2.0")
+  updateSelectInput(session, "select_version", "Version:",
+                    choices = c("v2.0", "v2.1", "v3.0"), selected = "v3.0")
+
+  # Using static set of GRCh38 genes from annotables; the datasets in MM25 also
+  # include some other gene symbols, but there are generally quite rare and not
+  # likely to be of interest
+  updateSelectizeInput(session, "select_coex_gene1", choices = grch38$symbol,
+                       selected = "MCL1", server = TRUE)
+
+  updateSelectizeInput(session, "select_coex_gene2", choices = grch38$symbol,
+                       selected = "ZNF117", server = TRUE)
 
   #
   # Event Hanlders
@@ -533,6 +551,14 @@ server <- function(input, output, session) {
     opts <- names(cfg()$mm25_scores$genes)
     names(opts) <- Hmisc::capitalize(gsub('_', ' ', opts))
 
+    # in order to trigger the select version subset, first set it to NULL, then
+    # repopulate the choices
+
+    # if this doesn't work, try creating a (global) variable that indicates whether
+    # the app has been reset, and if so, update each piece until ready..
+    updateSelectInput(session, "select_version_subset", "Subset:",
+                      choices = c("loading..."), selected = "loading...")
+
     updateSelectInput(session, "select_version_subset", "Subset:",
                       choices = opts, selected = "all")
   })
@@ -540,15 +566,16 @@ server <- function(input, output, session) {
   observeEvent(input$select_version_subset, {
     req(input$select_version)
 
-    rv$plot_feature_level <- "genes"
+    if (input$select_version_subset != 'loading...') {
+      rv$plot_feature_level <- "genes"
 
-    message("observeEvent(input$select_version_subset)")
-    
-    updateSelectInput(session, "select_plot_feature_level", "Feature Level:",
-                      choices = feature_levels, selected = "genes")
+      message("observeEvent(input$select_version_subset)")
+
+      updateSelectInput(session, "select_plot_feature_level", "Feature Level:",
+                        choices = feature_levels, selected = "genes")
+    }
   })
 
-  # observeEvent(input$select_version_subset, {
   observeEvent(input$select_plot_feature_level, {
     req(input$select_version_subset)
 
@@ -574,7 +601,7 @@ server <- function(input, output, session) {
 
   observeEvent(input$select_plot_covariate, {
     message("observeEvent(input$select_plot_covariate)")
-    rv$plot_covariate <- input$select_plot_covariate 
+    rv$plot_covariate <- input$select_plot_covariate
   })
 
   observeEvent(input$select_plot_feature, {
@@ -628,7 +655,7 @@ server <- function(input, output, session) {
   output$mm25_pathway_pvals_combined_table <- renderDataTable({
     req(input$select_version_subset)
     req(input$select_pathway_table_format)
-    
+
     message("mm25_pathway_pvals_combined_table")
 
     float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_wt"), "_pval")
@@ -894,6 +921,41 @@ server <- function(input, output, session) {
     print(grid.arrange(grobs = plts, ncol = 1))
   })
 
+  output$gene_coex_plots <- renderPlot({
+    req(gene_data())
+    req(input$select_coex_gene1)
+    req(input$select_coex_gene2)
+
+    gene1 <- input$select_coex_gene1
+    gene2 <- input$select_coex_gene2
+
+    # iterate over datasets and generate a plot for each one including both genes
+    plts <- list()
+
+    for (dat_name in names(gene_data())) {
+      dat <- gene_data()[[dat_name]] %>%
+        filter(symbol %in% c(gene1, gene2))
+
+      if (nrow(dat) == 2) {
+        dat_long <- dat %>% 
+          column_to_rownames('symbol') %>% 
+          t() %>%
+          as.data.frame()
+
+        # compute pearson correlation
+        coex_cor <- cor(dat_long[, 1], dat_long[, 2], use = 'pairwise.complete')
+
+        plts[[dat_name]] <- ggplot(dat_long, aes_string(gene1, gene2)) +
+            geom_point() +
+            geom_smooth(method = lm) +
+            ggtitle(sprintf("%s (cor = %0.2f)", dat_name, coex_cor)) +
+            theme_dark()
+      }
+    }
+    
+    print(grid.arrange(grobs = plts, ncol = 2))
+  })
+
   output$fgsea_summary_plot <- renderPlotly({
     message("fgsea_summary_plot()")
 
@@ -998,6 +1060,18 @@ ui <- function(request) {
           )
         )
       ),
+      tabPanel(
+        "Co-expression",
+        column(
+          width = 3,
+          selectizeInput("select_coex_gene1", "Gene 1", choices = NULL),
+          selectizeInput("select_coex_gene2", "Gene 2", choices = NULL)
+        ),
+        column(
+          width = 9,
+          withSpinner(plotOutput("gene_coex_plots", height = "4000px"))
+        ),
+      ),
       navbarMenu(
         "Functional Enrichment",
         tabPanel(
@@ -1007,7 +1081,7 @@ ui <- function(request) {
         ),
 
         #
-        # May 27, 2020: 
+        # May 27, 2020:
         #
         # Disabling this section for now until refactoring can be performed and it can
         # be more easily extended to support MM25 category/cluster subsets.
@@ -1043,7 +1117,6 @@ ui <- function(request) {
       ),
       tabPanel(
         "Settings",
-        # selectInput("select_version", "Version:", choices=c("v2.0", "v2.1"), selected = "v2.0"),
         selectInput("select_version", "Version:", choices = NULL),
         selectInput("select_version_subset", "Subset:", choices = NULL),
         selectInput("select_table_format", "Display:", choices = c("P-values", "Ranks"), selected = "Ranks")
