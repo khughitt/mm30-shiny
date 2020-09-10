@@ -10,6 +10,10 @@ dataset_metadata: '/data/human/geo/metadata.tsv'
 phenotype_metadata: '/data/nih/fassoc/mm25/3.0/metadata/association_metadata.feather'
 phenotype_clusters: '/data/nih/mm25/3.0/clusters/mm25_gene_covariate_clusters.feather'
 
+# pubtator co-occurence analysis results
+pubtator:
+  gene_disease: '/data/nlp/pubtator/pubtator_central/2020-08-13/processed/1.0/extra/gene_disease_comat.feather'
+
 # individual covariate p-values / fgsea results
 gene_pvals_indiv: '/data/nih/fassoc/mm25/3.0/merged/mm25_gene_association_pvals.feather'
 pathway_pvals_indiv: '/data/nih/fassoc/mm25/3.0/merged/mm25_pathway_association_pvals.feather'

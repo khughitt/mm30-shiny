@@ -30,7 +30,7 @@ source("R/plotting.R")
 
 options(stringsAsFactors = FALSE)
 options(spinner.color="#00bc8c")
-options(digits = 3)
+options(scipen = 2, digits = 3)
 set.seed(1)
 
 # ggplot theme
@@ -526,7 +526,7 @@ server <- function(input, output, session) {
   # Manually setup / trigger select_version event
   #
   updateSelectInput(session, "select_version", "Version:",
-                    choices = c("v2.0", "v2.1", "v3.0"), selected = "v3.0")
+                    choices = c("v2.0", "v2.1", "v3.0", "v3.1", "v3.2"), selected = "v3.2")
 
   # Using static set of GRCh38 genes from annotables; the datasets in MM25 also
   # include some other gene symbols, but there are generally quite rare and not
@@ -535,7 +535,7 @@ server <- function(input, output, session) {
                        selected = "MCL1", server = TRUE)
 
   updateSelectizeInput(session, "select_coex_gene2", choices = grch38$symbol,
-                       selected = "ZNF117", server = TRUE)
+                       selected = "PBXIP1", server = TRUE)
 
   #
   # Event Hanlders
@@ -646,7 +646,7 @@ server <- function(input, output, session) {
 
     if (input$select_table_format == "P-values") {
       out <- out %>%
-        formatRound(columns = float_cols, digits = 5)
+        formatSignif(columns = float_cols, digits = 3)
     }
 
     out
@@ -654,7 +654,7 @@ server <- function(input, output, session) {
 
   output$mm25_pathway_pvals_combined_table <- renderDataTable({
     req(input$select_version_subset)
-    req(input$select_pathway_table_format)
+    # req(input$select_pathway_table_format)
 
     message("mm25_pathway_pvals_combined_table")
 
@@ -663,33 +663,28 @@ server <- function(input, output, session) {
     dat <- mm25_pathway_pvals_combined()
 
     # convert to ranks, if requested
-    if (input$select_pathway_table_format == "Ranks") {
-      dat <- dat %>%
-        mutate_at(vars(ends_with("_pval")), dense_rank)
-    }
+    # if (input$select_pathway_table_format == "Ranks") {
+    #   dat <- dat %>%
+    #     mutate_at(vars(ends_with("_pval")), dense_rank)
+    # }
 
     # construct data table
-    out <- DT::datatable(dat %>% select(-gene_set),
-                  style = "bootstrap", escape = FALSE, options = list(pageLength = 15))
-
-    if (input$select_pathway_table_format == "P-values") {
-      out <- out %>%
-        formatRound(columns = float_cols, digits = 5)
-    }
-
-    out
+    DT::datatable(dat %>% select(-gene_set),
+                         style = "bootstrap", escape = FALSE,
+                         options = list(pageLength = 15)) %>%
+      formatSignif(columns = float_cols, digits = 3)
   })
 
   output$fgsea_results_indiv <- renderDataTable({
     DT::datatable(fgsea_results_indiv_filtered(),
                   style = "bootstrap", escape = FALSE, options = list(pageLength = 15)) %>%
-        formatRound(columns = c("pval", "padj", "ES", "NES"), digits = 5)
+        formatSignif(columns = c("pval", "padj", "ES", "NES"), digits = 3)
   })
 
   # output$fgsea_results_combined <- renderDataTable({
   #   DT::datatable(fgsea_results_combined_filtered(),
   #                 style = "bootstrap", escape = FALSE, options = list(pageLength = 15)) %>%
-  #       formatRound(columns = c("pval", "padj", "ES", "NES"), digits = 5)
+  #       formatSignif(columns = c("pval", "padj", "ES", "NES"), digits = 5)
   # })
 
   output$fgsea_summary_table <- renderDataTable({
@@ -937,8 +932,8 @@ server <- function(input, output, session) {
         filter(symbol %in% c(gene1, gene2))
 
       if (nrow(dat) == 2) {
-        dat_long <- dat %>% 
-          column_to_rownames('symbol') %>% 
+        dat_long <- dat %>%
+          column_to_rownames('symbol') %>%
           t() %>%
           as.data.frame()
 
@@ -952,7 +947,7 @@ server <- function(input, output, session) {
             theme_dark()
       }
     }
-    
+
     print(grid.arrange(grobs = plts, ncol = 2))
   })
 
