@@ -515,6 +515,11 @@ server <- function(input, output, session) {
     selectInput("select_fgsea_subset", "Subset (Affects Ranking Methods Only): ", choices = opts, selected = 'all')
   })
 
+  # output$select_nlp_concept <- renderUI({
+  #   selectInput("select_nlp_concept", "Disease Term", choices =
+  #               colnames(pubtator_gene_disease())[-1], selected = "Multiple Myeloma")
+  # })
+
   rv <- reactiveValues(
     # version_subset = NULL,
     plot_feature_level = NULL,
@@ -696,6 +701,23 @@ server <- function(input, output, session) {
         req(input$select_fgsea_subset)
         dat <- fgsea_summary_combined()
     }
+
+    DT::datatable(dat, style = "bootstrap", options = list(pageLength = 15))
+  })
+
+  output$nlp_pubtator_rankings <- renderDataTable({
+    dat <- read_feather(cfg()$pubtator$gene_disease) %>%
+      rename(symbol = gene) %>%
+      group_by(symbol) %>%
+      summarize_all(max)
+
+    gene_ranks <- mm25_gene_pvals_combined() %>%
+      select(symbol, sumz_wt_pval) %>%
+      mutate(rank = dense_rank(sumz_wt_pval)) %>%
+      select(-sumz_wt_pval)
+
+    dat <- gene_ranks %>%
+      inner_join(dat, by = 'symbol')
 
     DT::datatable(dat, style = "bootstrap", options = list(pageLength = 15))
   })
@@ -1065,6 +1087,18 @@ ui <- function(request) {
         column(
           width = 9,
           withSpinner(plotOutput("gene_coex_plots", height = "4000px"))
+        ),
+      ),
+      tabPanel(
+        # "NLP",
+        # column(
+        #   width = 3,
+        #   uiOutput("select_nlp_concept")
+        # )
+        "NLP",
+        column(
+          width = 12,
+          withSpinner(dataTableOutput("nlp_pubtator_rankings"))
         ),
       ),
       navbarMenu(
