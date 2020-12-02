@@ -60,6 +60,11 @@ plot_categorical <- function(dat, dataset, covariate, feat_name, color_pal, plot
   # draw violin + jitter plot
   set.seed(1)
 
+  # if more factor levels exist than colors, expand palette
+  if (nlevels(dat$response) > length(color_pal)) {
+    color_pal <- pal <- colorRampPalette(color_pal)(nlevels(dat$response))
+  }
+
   ggplot(dat, aes(x = response, y = feature)) +
     # geom_boxplot(aes(fill = response, color = response), outlier.shape = NA) +
     geom_violin(aes(fill = response, color = response), alpha = 0.5, draw_quantiles = c(0.5)) +

@@ -3,23 +3,23 @@
 #
 
 # metadata
-dataset_metadata: '/data/human/geo/metadata.tsv'
-phenotype_metadata: '/data/nih/fassoc/mm25/1.0/summary/phenotype_metadata.feather'
+dataset_metadata: '/data/clean/geo/metadata.tsv'
+phenotype_metadata: '/data/fassoc/mm25/1.0/summary/phenotype_metadata.feather'
 
 # gene-level results
-gene_pvals_indiv: '/data/nih/fassoc/mm25/1.0/summary/genes.feather'
-gene_pvals_combined: '/data/nih/mm25/1.0/all/MM25_genes.feather'
+gene_pvals_indiv: '/data/fassoc/mm25/1.0/summary/genes.feather'
+gene_pvals_combined: '/data/proj/mm25/1.0/all/MM25_genes.feather'
 
 # pathway-level results
-pathway_pvals_indiv: '/data/nih/fassoc/mm25/1.0/summary/pathways.feather'
-pathway_pvals_combined: '/data/nih/mm25/1.0/all/MM25_pathways.feather'
+pathway_pvals_indiv: '/data/fassoc/mm25/1.0/summary/pathways.feather'
+pathway_pvals_combined: '/data/proj/mm25/1.0/all/MM25_pathways.feather'
 
 # dataset config dir
 dataset_cfg_dir: '~/d/r/nih/fassoc/datasets/mm25/1.0'
 
 # functional enrichment results
-fgsea_results_combined: '/data/nih/fgsea/mm25/1.0/results/merged/MM25_genes.parquet'
-fgsea_results_indiv: '/data/nih/fgsea/mm25/1.0/results/merged/genes.parquet'
+fgsea_results_combined: '/data/fgsea/mm25/1.0/results/merged/MM25_genes.parquet'
+fgsea_results_indiv: '/data/fgsea/mm25/1.0/results/merged/genes.parquet'
 
-fgsea_summary_combined: '/data/nih/fgsea/mm25/1.0/results/summary/MM25_genes_summary.tsv'
-fgsea_summary_indiv: '/data/nih/fgsea/mm25/1.0/results/summary/genes_summary.tsv'
+fgsea_summary_combined: '/data/fgsea/mm25/1.0/results/summary/MM25_genes_summary.tsv'
+fgsea_summary_indiv: '/data/fgsea/mm25/1.0/results/summary/genes_summary.tsv'

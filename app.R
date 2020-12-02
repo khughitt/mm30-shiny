@@ -1,6 +1,6 @@
 #
-# Feature weights shiny UI
-# KH Jan 2020
+# MM25 Shiny UI
+# KH Nov 2020
 #
 # TODO:
 #
@@ -81,11 +81,14 @@ server <- function(input, output, session) {
 
   # load dataset and covariate metadata
   phenotype_metadata <- reactive({
-    message("phenotype_metadata()")
+    message("[phenotype_metadata]")
 
     dataset_metadata <- read_tsv(cfg()$dataset_metadata, col_types = cols())
 
-    dat <- read_feather(cfg()$phenotype_metadata)
+    infile <- cfg()$phenotype_metadata
+    message(sprintf("[phenotype_metadata] loading %s", infile))
+
+    dat <- read_feather(infile)
 
     if ("feature_level" %in% colnames(dat)) {
       dat <- dat %>%
@@ -112,7 +115,10 @@ server <- function(input, output, session) {
     dat$category <- factor(dat$category)
 
     # add covariate cluster
-    covariate_clusters <- read_feather(cfg()$phenotype_clusters) %>%
+    infile <- cfg()$phenotype_clusters
+    message(sprintf("[phenotype_metadata] loading %s", infile))
+
+    covariate_clusters <- read_feather(infile) %>%
       rename(covariate_id = covariate)
 
     dat <- dat %>%
@@ -148,9 +154,9 @@ server <- function(input, output, session) {
 
   # load MM25 combined pvals
   mm25_gene_pvals_combined <- eventReactive(input$select_version_subset, {
-    message("mm25_gene_pvals_combined()")
-
     infile <- cfg()$mm25_scores$genes[[input$select_version_subset]]
+
+    message(sprintf("[mm25_gene_pvals_combined] loading %s", infile))
 
     read_feather(infile) %>%
       select(symbol, sumz_wt_pval, sumz_pval, sumlog_pval, min_pval, num_present, num_missing)
@@ -161,9 +167,9 @@ server <- function(input, output, session) {
 
     infile <- cfg()$mm25_scores$pathways[[input$select_version_subset]]
 
-    dat <- read_feather(infile)
+    message(sprintf("[mm25_pathway_pvals_combined] loading %s", infile))
 
-    message("mm25_pathway_pvals_combined()")
+    dat <- read_feather(infile)
 
     # add links to msigdb pathway info pages
     msigdb_ids <- sub("[^_]*_", "", dat$gene_set)
@@ -176,16 +182,20 @@ server <- function(input, output, session) {
   })
 
   mm25_gene_pvals_indiv <- reactive({
-    read_feather(cfg()$gene_pvals_indiv)
+    infile <- cfg()$gene_pvals_indiv
+    message(sprintf("[mm25_gene_pvals_indiv] loading %s", infile))
+    read_feather(infile)
   })
 
   mm25_pathway_pvals_indiv <- reactive({
-    read_feather(cfg()$pathway_pvals_indiv)
+    infile <- cfg()$pathway_pvals_indiv
+    message(sprintf("[mm25_pathway_pvals_indiv] loading %s", infile))
+    read_feather(infile)
   })
 
   # individual dataset p-values
   mm25_feature_pvals <- reactive({
-    message("mm25_feature_pvals()")
+    message("[mm25_feature_pvals]")
 
     if (rv$plot_feature_level == 'genes') {
       dat <- mm25_gene_pvals_indiv() %>%
@@ -202,7 +212,7 @@ server <- function(input, output, session) {
   })
 
   mm25_feature_padjs <- reactive({
-    message("mm25_feature_padjs()")
+    message("[mm25_feature_padjs]")
 
     mm25_feature_pvals() %>%
       mutate_at(vars(-feature_id), p.adjust, method = "BH")
@@ -227,7 +237,7 @@ server <- function(input, output, session) {
   # load individual dataset gene expression data;
   # used to generate gene-level feature vs. phenotype plots
   gene_data <- reactive({
-    message("gene_data()")
+    message("[gene_data] init")
 
     gene_infiles <- lapply(dataset_cfgs(), function(x) {
       x$features$genes$rna
@@ -237,7 +247,14 @@ server <- function(input, output, session) {
     mask <- startsWith(names(gene_infiles), "GSE")
     gene_infiles[mask] <- sub(".feather", "_nr.feather", gene_infiles[mask])
 
-    dat <- lapply(gene_infiles, read_feather)
+    # dat <- lapply(gene_infiles, read_feather)
+
+    dat <- list()
+
+    for (infile in gene_infiles) {
+      message(sprintf("[gene_data] loading %s", infile))
+      dat[[infile]] <- read_feather(infile)
+    }
     names(dat) <- names(dataset_cfgs())
 
     dat
@@ -251,9 +268,11 @@ server <- function(input, output, session) {
   # load individual dataset gene expression data;
   # used to generate gene-level feature vs. phenotype plots
   pathway_data <- reactive({
-    message("pathway_data()")
+    message("[pathway_data] init")
 
     read_data <- function(x) {
+      message(sprintf("[pathway_data] loading %s", x))
+
       if (endsWith(x, 'parquet')) {
         read_parquet(x)
       } else {
@@ -277,6 +296,8 @@ server <- function(input, output, session) {
     for (dataset_id in names(dataset_cfgs())) {
       dataset_cfg <- dataset_cfgs()[[dataset_id]]
       infile <- dataset_cfg$phenotypes$path
+
+      message(sprintf("[pheno_data] loading %s", infile))
 
       if (endsWith(infile, "tsv") || endsWith(infile, "tsv.gz")) {
         dat[[dataset_id]] <- read_tsv(infile, col_types = cols())
@@ -321,7 +342,7 @@ server <- function(input, output, session) {
   fgsea_summary_indiv <- reactive({
     # dat <- read_tsv(cfg()$fgsea_summary_indiv, col_types = cols()) %>%
     #   arrange(desc(num_sig))
-    message("fgsea_summary_indiv()")
+    message("[fgsea_summary_indiv]")
 
     phenotype_metadata() %>%
       select(dataset, phenotype, num_samples, num_sig_gsea, num_sig_assoc) %>%
@@ -338,9 +359,11 @@ server <- function(input, output, session) {
   })
 
   fgsea_results_indiv <- reactive({
-    message("fgsea_results_indiv()")
+    message("[fgsea_results_indiv]")
 
     infile <- cfg()$fgsea_results_indiv
+
+    message(sprintf("[fgsea_results_indiv] loading %s", infile))
 
     if (endsWith(infile, 'parquet')) {
       dat <- read_parquet(infile)
@@ -475,7 +498,7 @@ server <- function(input, output, session) {
   # })
 
   output$fgsea_select_covariate <- renderUI({
-    message("fgsea_select_covariate()")
+    message("[fgsea_select_covariate]")
 
     fgsea_summary <- fgsea_summary_indiv() %>%
       select(dataset, phenotype, num_sig = num_sig_gsea) %>%
@@ -646,6 +669,17 @@ server <- function(input, output, session) {
         mutate_at(vars(ends_with("_pval")), dense_rank)
     }
 
+    # add biotype
+    gene_biotypes <- grch38 %>%
+      select(symbol, biotype) %>%
+      group_by(symbol) %>%
+      slice(1) %>%
+      ungroup()
+
+    dat <- dat %>%
+      left_join(gene_biotypes, by = 'symbol') %>%
+      select(symbol, biotype, everything())
+
     # construct data table
     out <- DT::datatable(dat, style = "bootstrap", options = list(pageLength = 15))
 
@@ -706,7 +740,11 @@ server <- function(input, output, session) {
   })
 
   output$nlp_pubtator_rankings <- renderDataTable({
-    dat <- read_feather(cfg()$pubtator$gene_disease) %>%
+    infile <- cfg()$pubtator$gene_disease
+
+    message(sprintf("[nlp_pubtator_rankings] loading %s", infile))
+
+    dat <- read_feather(infile) %>%
       rename(symbol = gene) %>%
       group_by(symbol) %>%
       summarize_all(max)
@@ -974,7 +1012,7 @@ server <- function(input, output, session) {
   })
 
   output$fgsea_summary_plot <- renderPlotly({
-    message("fgsea_summary_plot()")
+    message("[fgsea_summary_plot]")
 
     # retrieve indiv and combined fgsea results
     indiv_dat <- phenotype_metadata() %>%

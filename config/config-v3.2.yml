@@ -1,0 +1,59 @@
+#
+# MM25 v3.2 configuration
+#
+
+# dataset config dir
+dataset_cfg_dir: '~/d/r/tools/fassoc/datasets/mm25/3.2'
+
+# metadata
+dataset_metadata: '/data/clean/geo/metadata.tsv'
+phenotype_metadata: '/data/fassoc/mm25/3.2/metadata/association_metadata.feather'
+phenotype_clusters: '/data/proj/mm25/3.2/clusters/mm25_gene_covariate_clusters.feather'
+
+# pubtator co-occurence analysis results
+pubtator:
+  gene_disease: '/data/proj/pubtator/2020-08-13/1.0/extra/gene_disease_comat.feather'
+
+# individual covariate p-values / fgsea results
+gene_pvals_indiv: '/data/fassoc/mm25/3.2/merged/mm25_gene_association_pvals.feather'
+pathway_pvals_indiv: '/data/fassoc/mm25/3.2/merged/mm25_pathway_association_pvals.feather'
+fgsea_results_indiv: '/data/fgsea/mm25/3.2/results/merged/mm25_gene_association_pvals.feather'
+fgsea_summary_indiv: '/data/fgsea/mm25/3.2/results/summary/mm25_gene_association_pvals_summary.tsv'
+
+# mm25 scores / fgsea results
+mm25_scores:
+  genes:
+    all: '/data/proj/mm25/3.2/results/all/mm25_gene_scores.feather'
+    disease_stage: '/data/proj/mm25/3.2/results/categories/mm25_gene_disease_stage_scores.feather'
+    survival: '/data/proj/mm25/3.2/results/categories/mm25_gene_survival_scores.feather'
+    treatment: '/data/proj/mm25/3.2/results/categories/mm25_gene_treatment_scores.feather'
+    cluster1: '/data/proj/mm25/3.2/results/clusters/mm25_gene_0_scores.feather'
+    cluster2: '/data/proj/mm25/3.2/results/clusters/mm25_gene_1_scores.feather'
+    cluster3: '/data/proj/mm25/3.2/results/clusters/mm25_gene_2_scores.feather'
+  pathways:
+    all: '/data/proj/mm25/3.2/results/all/mm25_pathway_scores.feather'
+    disease_stage: '/data/proj/mm25/3.2/results/categories/mm25_pathway_disease_stage_scores.feather'
+    survival: '/data/proj/mm25/3.2/results/categories/mm25_pathway_survival_scores.feather'
+    treatment: '/data/proj/mm25/3.2/results/categories/mm25_pathway_treatment_scores.feather'
+    cluster1: '/data/proj/mm25/3.2/results/clusters/mm25_pathway_0_scores.feather'
+    cluster2: '/data/proj/mm25/3.2/results/clusters/mm25_pathway_1_scores.feather'
+    cluster3: '/data/proj/mm25/3.2/results/clusters/mm25_pathway_2_scores.feather'
+
+mm25_fgsea:
+  pvalues:
+    all: '/data/fgsea/mm25/3.2/results/merged/mm25_gene_scores.feather'
+    disease_stage: '/data/fgsea/mm25/3.2/results/merged/mm25_gene_disease_stage_scores.feather'
+    survival: '/data/fgsea/mm25/3.2/results/merged/mm25_gene_survival_scores.feather'
+    treatment: '/data/fgsea/mm25/3.2/results/merged/mm25_gene_treatment_scores.feather'
+    cluster1: '/data/fgsea/mm25/3.2/results/merged/mm25_gene_0_scores.feather'
+    cluster2: '/data/fgsea/mm25/3.2/results/merged/mm25_gene_1_scores.feather'
+    cluster3: '/data/fgsea/mm25/3.2/results/merged/mm25_gene_2_scores.feather'
+  summary:
+    all: '/data/fgsea/mm25/3.2/results/summary/mm25_gene_scores_summary.tsv'
+    disease_stage: '/data/fgsea/mm25/3.2/results/summary/mm25_gene_disease_stage_scores_summary.tsv'
+    survival: '/data/fgsea/mm25/3.2/results/summary/mm25_gene_survival_scores_summary.tsv'
+    treatment: '/data/fgsea/mm25/3.2/results/summary/mm25_gene_treatment_scores_summary.tsv'
+    cluster1: '/data/fgsea/mm25/3.2/results/summary/mm25_gene_0_scores_summary.tsv'
+    cluster2: '/data/fgsea/mm25/3.2/results/summary/mm25_gene_1_scores_summary.tsv'
+    cluster3: '/data/fgsea/mm25/3.2/results/summary/mm25_gene_2_scores_summary.tsv'
+
