@@ -341,7 +341,7 @@ server <- function(input, output, session) {
     req(rv$plot_covariate)
     req(input$select_survival_expr_cutoffs)
 
-    message("feature_plot_dat")
+    message("[feature_plot_dat]")
 
     pheno <- rv$plot_covariate
 
@@ -819,7 +819,7 @@ server <- function(input, output, session) {
       pheno <- rv$plot_covariate
       pheno <- sub("_pval", "", pheno)
 
-      sprintf("%s_%s.tsv", pheno)
+      sprintf("%s.tsv", pheno)
     },
     content = function(file) {
       write_tsv(feature_plot_dat(), file)
@@ -833,7 +833,7 @@ server <- function(input, output, session) {
     req(feature_plot_dat)
     req(rv$plot_covariate)
 
-    message("feature_plot")
+    message("[feature_plot]")
 
     pheno <- rv$plot_covariate
     pheno <- sub("_pval", "", pheno)
