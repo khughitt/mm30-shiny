@@ -336,6 +336,59 @@ server <- function(input, output, session) {
       filter(dataset ==  dataset_id & phenotype == pheno)
   })
 
+
+  feature_plot_dat <- reactive({
+    req(rv$plot_covariate)
+    req(input$select_survival_expr_cutoffs)
+
+    message("feature_plot_dat")
+
+    pheno <- rv$plot_covariate
+
+    # backwards-compatibility
+    pheno <- sub("_pval", "", pheno)
+
+    # get dataset and covariate names
+    dataset_id <- unlist(str_split(pheno, "_"))[1]
+    covariate <- sub(paste0(dataset_id, "_"), "", pheno)
+
+    # feature data
+    if (rv$plot_feature_level == 'genes') {
+      feat_dat <- gene_data()[[dataset_id]] %>%
+        filter(symbol == rv$plot_feature) %>%
+        select(-symbol) %>%
+        as.numeric()
+    } else {
+      feat_dat <- pathway_data()[[dataset_id]] %>%
+        filter(gene_set == rv$plot_feature) %>%
+        select(-gene_set) %>%
+        as.numeric()
+    }
+
+    # get config for selected feature-phenotype association
+    assoc_cfg <- dataset_cfgs()[[dataset_id]]$phenotypes$associations[[covariate]]
+    assoc_method <- assoc_cfg$method
+
+    # assoc_method <- phenotype_metadata() %>%
+    #   filter(dataset == dataset_id & phenotype == covariate) %>%
+    #   pull(method)
+
+    if (assoc_method == "survival") {
+      # survival plot
+      pheno_dat <- pheno_data()[[dataset_id]]
+
+      time_dat <- pull(pheno_dat, assoc_cfg$params$time)
+      event_dat <- pull(pheno_dat, assoc_cfg$params$event)
+
+      data.frame(feature = feat_dat, time = time_dat, event = event_dat)
+    } else {
+      # violin plot
+      response <- factor(pull(pheno_data()[[dataset_id]], assoc_cfg$params$field))
+
+      data.frame(feature = feat_dat, response)
+    }
+  })
+
   #
   # reactives - fgsea
   #
@@ -760,62 +813,47 @@ server <- function(input, output, session) {
     DT::datatable(dat, style = "bootstrap", options = list(pageLength = 15))
   })
 
+  output$download_plot_data <- downloadHandler(
+    filename = function() {
+      # filename parts
+      pheno <- rv$plot_covariate
+      pheno <- sub("_pval", "", pheno)
+
+      sprintf("%s_%s.tsv", pheno)
+    },
+    content = function(file) {
+      write_tsv(feature_plot_dat(), file)
+    }
+  )
+
   #
   # Plots
   #
   output$feature_plot <- renderPlot({
+    req(feature_plot_dat)
     req(rv$plot_covariate)
-    req(input$select_survival_expr_cutoffs)
 
     message("feature_plot")
 
     pheno <- rv$plot_covariate
-
-    # backwards-compatibility
     pheno <- sub("_pval", "", pheno)
 
     # get dataset and covariate names
     dataset_id <- unlist(str_split(pheno, "_"))[1]
     covariate <- sub(paste0(dataset_id, "_"), "", pheno)
 
-    # feature data
-    if (rv$plot_feature_level == 'genes') {
-      feat_dat <- gene_data()[[dataset_id]] %>%
-        filter(symbol == rv$plot_feature) %>%
-        select(-symbol) %>%
-        as.numeric()
-    } else {
-      feat_dat <- pathway_data()[[dataset_id]] %>%
-        filter(gene_set == rv$plot_feature) %>%
-        select(-gene_set) %>%
-        as.numeric()
-    }
-
     # get config for selected feature-phenotype association
     assoc_cfg <- dataset_cfgs()[[dataset_id]]$phenotypes$associations[[covariate]]
     assoc_method <- assoc_cfg$method
 
-    # assoc_method <- phenotype_metadata() %>%
-    #   filter(dataset == dataset_id & phenotype == covariate) %>%
-    #   pull(method)
+    dat <- feature_plot_dat()
 
     if (assoc_method == "survival") {
       # survival plot
-      pheno_dat <- pheno_data()[[dataset_id]]
-
-      time_dat <- pull(pheno_dat, assoc_cfg$params$time)
-      event_dat <- pull(pheno_dat, assoc_cfg$params$event)
-
-      dat <- data.frame(feature = feat_dat, time = time_dat, event = event_dat)
-
       plot_survival(dat, dataset_id, covariate, rv$plot_feature,
                     input$select_survival_expr_cutoffs, color_pal, theme_dark)
     } else {
       # violin plot
-      response <- factor(pull(pheno_data()[[dataset_id]], assoc_cfg$params$field))
-
-      dat <- data.frame(feature = feat_dat, response)
-
       plot_categorical(dat, dataset_id, covariate, rv$plot_feature, color_pal, theme_dark)
     }
   })
@@ -1086,6 +1124,8 @@ ui <- function(request) {
           ),
           column(
             width = 8,
+            # uiOutput("feature_plot_tsv"),
+            downloadLink("download_plot_data", "Download (.tsv)"),
             withSpinner(plotOutput("feature_plot", height = "760px"))
           )
         )

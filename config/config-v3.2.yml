@@ -3,7 +3,7 @@
 #
 
 # dataset config dir
-dataset_cfg_dir: '~/d/r/tools/fassoc/datasets/mm25/3.2'
+dataset_cfg_dir: '~/d/biodat/pipeline/analyses/associate/datasets/mm25/3.2'
 
 # metadata
 dataset_metadata: '/data/clean/geo/metadata.tsv'
