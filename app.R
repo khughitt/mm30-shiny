@@ -55,6 +55,13 @@ color_pal <- c("#36c764", "#c73699", "#3650c7", "#c7ac36", "#c7365f", "#bb36c7")
 surv_expr_cutoffs <- seq(5, 50, by = 5)
 names(surv_expr_cutoffs) <- paste0(surv_expr_cutoffs, " %")
 
+# load config
+cfg <- read_yaml("config/config-v3.2.yml")
+
+# data subset options ("all", "disease stage", etc.)
+subset_opts <- names(cfg$mm25_scores$genes)
+names(subset_opts) <- Hmisc::capitalize(gsub('_', ' ', subset_opts))
+
 #############################
 #
 # Shiny Server
@@ -65,22 +72,16 @@ server <- function(input, output, session) {
   # Reactives
   #
 
-  # load config
-  cfg <- reactive({
-    req(input$select_version)
-    read_yaml(sprintf("config/config-%s.yml", input$select_version))
-  })
-
   # gene cytogenetic band mapping
-  cyto_bands <- read_tsv(cfg()$cytogenetic_bands, col_types = cols())
+  cyto_bands <- read_tsv(cfg$cytogenetic_bands, col_types = cols())
 
   # load dataset and covariate metadata
   phenotype_metadata <- reactive({
     message("[phenotype_metadata]")
 
-    dataset_metadata <- read_tsv(cfg()$dataset_metadata, col_types = cols())
+    dataset_metadata <- read_tsv(cfg$dataset_metadata, col_types = cols())
 
-    infile <- cfg()$phenotype_metadata
+    infile <- cfg$phenotype_metadata
     message(sprintf("[phenotype_metadata] loading %s", infile))
 
     dat <- read_feather(infile)
@@ -110,7 +111,7 @@ server <- function(input, output, session) {
     dat$category <- factor(dat$category)
 
     # add covariate cluster
-    infile <- cfg()$phenotype_clusters
+    infile <- cfg$phenotype_clusters
     message(sprintf("[phenotype_metadata] loading %s", infile))
 
     covariate_clusters <- read_feather(infile) %>%
@@ -141,7 +142,7 @@ server <- function(input, output, session) {
 
   # load MM25 combined pvals
   mm25_gene_pvals_combined <- eventReactive(input$select_version_subset, {
-    infile <- cfg()$mm25_scores$genes[[input$select_version_subset]]
+    infile <- cfg$mm25_scores$genes[[input$select_version_subset]]
 
     message(sprintf("[mm25_gene_pvals_combined] loading %s", infile))
 
@@ -153,7 +154,7 @@ server <- function(input, output, session) {
   mm25_pathway_pvals_combined <- reactive({
     req(input$select_version_subset)
 
-    infile <- cfg()$mm25_scores$pathways[[input$select_version_subset]]
+    infile <- cfg$mm25_scores$pathways[[input$select_version_subset]]
 
     message(sprintf("[mm25_pathway_pvals_combined] loading %s", infile))
 
@@ -170,27 +171,18 @@ server <- function(input, output, session) {
       # select(pathway, gene_set, sumz_wt_pval, sumz_pval, sumlog_pval, min_pval, num_present, num_missing)
   })
 
-  mm25_gene_pvals_indiv <- reactive({
-    infile <- cfg()$gene_pvals_indiv
-    message(sprintf("[mm25_gene_pvals_indiv] loading %s", infile))
-    read_feather(infile)
-  })
-
-  mm25_pathway_pvals_indiv <- reactive({
-    infile <- cfg()$pathway_pvals_indiv
-    message(sprintf("[mm25_pathway_pvals_indiv] loading %s", infile))
-    read_feather(infile)
-  })
-
   # individual dataset p-values
+  mm25_gene_pvals_indiv <- read_feather(cfg$gene_pvals_indiv)
+  mm25_pathway_pvals_indiv <- read_feather(cfg$pathway_pvals_indiv)
+
   mm25_feature_pvals <- reactive({
     message("[mm25_feature_pvals]")
 
     if (rv$plot_feature_level == 'genes') {
-      dat <- mm25_gene_pvals_indiv() %>%
+      dat <- mm25_gene_pvals_indiv %>%
         rename(feature_id = symbol)
     } else {
-      dat <- mm25_pathway_pvals_indiv() %>%
+      dat <- mm25_pathway_pvals_indiv %>%
         rename(feature_id = gene_set)
     }
 
@@ -216,7 +208,7 @@ server <- function(input, output, session) {
   # TODO: store all needed paths, etc. in phenotype metadata file instead,
   # if possible
   dataset_cfgs <- reactive({
-    cfg_infiles <- Sys.glob(file.path(cfg()$dataset_cfg_dir, "*.yml"))
+    cfg_infiles <- Sys.glob(file.path(cfg$dataset_cfg_dir, "*.yml"))
     cfgs <- lapply(cfg_infiles, read_yaml)
     names(cfgs) <- sapply(cfgs, "[[", "name")
 
@@ -447,11 +439,9 @@ server <- function(input, output, session) {
     plot_covariate = NULL
   )
 
-  #
-  # Manually setup / trigger select_version event
-  #
-  updateSelectInput(session, "select_version", "Version:",
-                    choices = c("v2.0", "v2.1", "v3.0", "v3.1", "v3.2"), selected = "v3.2")
+  # manually trigger subset selection
+  # updateSelectInput(session, "select_version_subset", "Data Subset:",
+  #                   choices = subset_opts, selected = "all")
 
   # Using static set of GRCh38 genes from annotables; the datasets in MM25 also
   # include some other gene symbols, but there are generally quite rare and not
@@ -466,31 +456,8 @@ server <- function(input, output, session) {
   # Event Hanlders
   #
 
-  # 1. version subset
-  observeEvent(input$select_version, {
-    req(cfg())
-
-    # reset form fields when version changes
-    message("observeEvent(input$select_version)")
-
-    opts <- names(cfg()$mm25_scores$genes)
-    names(opts) <- Hmisc::capitalize(gsub('_', ' ', opts))
-
-    # in order to trigger the select version subset, first set it to NULL, then
-    # repopulate the choices
-
-    # if this doesn't work, try creating a (global) variable that indicates whether
-    # the app has been reset, and if so, update each piece until ready..
-    updateSelectInput(session, "select_version_subset", "Subset:",
-                      choices = c("loading..."), selected = "loading...")
-
-    updateSelectInput(session, "select_version_subset", "Subset:",
-                      choices = opts, selected = "all")
-  })
-
+  # version subset
   observeEvent(input$select_version_subset, {
-    req(input$select_version)
-
     if (input$select_version_subset != 'loading...') {
       rv$plot_feature_level <- "genes"
 
@@ -543,18 +510,11 @@ server <- function(input, output, session) {
   #
   output$mm25_gene_pvals_combined_table <- renderDataTable({
     req(input$select_version_subset)
-    req(input$select_table_format)
 
     # float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_wt"), "_pval")
     float_cols <- "sumz_wt_pval"
 
     dat <- mm25_gene_pvals_combined()
-
-    # convert to ranks, if requested
-    if (input$select_table_format == "Ranks") {
-      dat <- dat %>%
-        mutate_at(vars(ends_with("_pval")), dense_rank)
-    }
 
     # add biotype and description
     gene_annot <- grch38 %>%
@@ -562,6 +522,9 @@ server <- function(input, output, session) {
       group_by(symbol) %>%
       slice(1) %>%
       ungroup()
+
+    # remove the source info from gene description
+    gene_annot$description <- str_split(gene_annot$description, " \\[", simplify = TRUE)[, 1]
 
     dat <- dat %>%
       left_join(gene_annot, by = 'symbol') %>%
@@ -574,12 +537,9 @@ server <- function(input, output, session) {
     # construct data table
     out <- DT::datatable(dat, style = "bootstrap", options = list(pageLength = 15))
 
-    if (input$select_table_format == "P-values") {
-      out <- out %>%
+    out <- out %>%
         formatSignif(columns = float_cols, digits = 3)
-    }
 
-    out
   })
 
   output$mm25_pathway_pvals_combined_table <- renderDataTable({
@@ -747,9 +707,8 @@ ui <- function(request) {
       ),
       tabPanel(
         "Settings",
-        selectInput("select_version", "Version:", choices = NULL),
-        selectInput("select_version_subset", "Subset:", choices = NULL),
-        selectInput("select_table_format", "Display:", choices = c("P-values", "Ranks"), selected = "Ranks")
+        # selectInput("select_version_subset", "Subset:", choices = NULL)
+        selectInput("select_version_subset", "Subset:", choices = subset_opts, selected = "all")
       )
     )
   )
