@@ -146,9 +146,13 @@ server <- function(input, output, session) {
 
     message(sprintf("[mm25_gene_pvals_combined] loading %s", infile))
 
-    read_feather(infile) %>%
+    dat <- read_feather(infile) %>%
       select(symbol, sumz_wt_pval, num_present, num_missing)
-      # select(symbol, sumz_wt_pval, sumz_pval, sumlog_pval, min_pval, num_present, num_missing)
+
+    dat$pval_adj <- p.adjust(dat$sumz_wt_pval, method='BH')
+
+    dat %>%
+      select(-sumz_wt_pval)
   })
 
   mm25_pathway_pvals_combined <- reactive({
@@ -165,10 +169,14 @@ server <- function(input, output, session) {
 
     msigdb_links <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>",
                             msigdb_ids, dat$gene_set)
-    dat %>%
+    dat <- dat %>%
       add_column(pathway = msigdb_links, .before = 1) %>%
       select(pathway, gene_set, sumz_wt_pval, num_present, num_missing)
-      # select(pathway, gene_set, sumz_wt_pval, sumz_pval, sumlog_pval, min_pval, num_present, num_missing)
+
+    dat$pval_adj <- p.adjust(dat$sumz_wt_pval, method='BH')
+
+    dat %>%
+      select(-sumz_wt_pval)
   })
 
   # individual dataset p-values
@@ -225,13 +233,12 @@ server <- function(input, output, session) {
     })
 
     # for GEO datasets, make sure to use non-redundant (nr) versions of expression data
-    mask <- startsWith(names(gene_infiles), "GSE")
-    gene_infiles[mask] <- sub(".feather", "_nr.feather", gene_infiles[mask])
+    # mask <- startsWith(names(gene_infiles), "GSE")
+    # gene_infiles[mask] <- sub(".feather", "_nr.feather", gene_infiles[mask])
 
     # work-around (may 31, 2021)
-    gene_infiles[mask] <- sub('/data/clean/geo/3.1', '/data/expr', gene_infiles[mask])
-
-    gene_infiles <- sub("/data/clean/mmrf/IA15/rnaseq/", "/data/expr/MMRF/", gene_infiles)
+    # gene_infiles[mask] <- sub('/data/clean/geo/3.1', '/data/expr', gene_infiles[mask])
+    # gene_infiles <- sub("/data/clean/mmrf/IA15/rnaseq/", "/data/expr/MMRF/", gene_infiles)
 
     dat <- list()
 
@@ -250,7 +257,7 @@ server <- function(input, output, session) {
   })
 
   # load individual dataset gene expression data;
-  # used to generate gene-level feature vs. phenotype plots
+  # used to generate pathway-level feature vs. phenotype plots
   pathway_data <- reactive({
     message("[pathway_data] init")
 
@@ -512,7 +519,7 @@ server <- function(input, output, session) {
     req(input$select_version_subset)
 
     # float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_wt"), "_pval")
-    float_cols <- "sumz_wt_pval"
+    float_cols <- c("pval_adj")
 
     dat <- mm25_gene_pvals_combined()
 
@@ -549,7 +556,7 @@ server <- function(input, output, session) {
     message("mm25_pathway_pvals_combined_table")
 
     # float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_wt"), "_pval")
-    float_cols <- "sumz_wt_pval"
+    float_cols <- c("pval_adj")
 
     dat <- mm25_pathway_pvals_combined()
 
