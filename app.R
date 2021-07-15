@@ -4,8 +4,8 @@
 library(annotables)
 library(arrow)
 library(DT)
-library(ggdark)
 library(gridExtra)
+library(ggpubr)
 library(heatmaply)
 library(Hmisc)
 library(plotly)
@@ -14,9 +14,6 @@ library(shinycssloaders)
 library(survminer)
 library(tidyverse)
 library(yaml)
-# library(ggforce)
-# library(survival)
-# library(uwot)
 
 source("R/plotting.R")
 
@@ -25,31 +22,12 @@ options(spinner.color="#00bc8c")
 options(scipen = 2, digits = 3)
 set.seed(1)
 
-# ggplot theme
-theme_dark <- function(base_font_size = 18) {
-  dark_theme_gray(base_size = base_font_size) +
-    theme(axis.text.x = element_text(angle = 90),
-          legend.background = element_rect(fill = NA),
-          plot.background = element_rect(fill = "#222222"),
-          panel.border = element_rect(colour = "#333333", fill = NA, size = 1),
-          panel.grid.major = element_line(color = "#555555", size = 0.2),
-          panel.grid.minor = element_line(color = "#555555", size = 0.2))
-}
-
-# heatmap theme
-heatmap_theme <- dark_theme_gray() +
-  theme(plot.background = element_rect(fill = "#222222"),
-        panel.background = element_rect(fill = "#222222"),
-        panel.border = element_rect(colour = "#333333", fill = NA, size = 1),
-        legend.background = element_rect(fill = "#222222"),
-        axis.text.x = element_text(angle = 90),
-        axis.line = element_line(color = "white"))
-
 # feature levels
 feature_levels <- c(Genes = "genes", Pathways = "gene_sets")
 
 # plot colors
-color_pal <- c("#36c764", "#c73699", "#3650c7", "#c7ac36", "#c7365f", "#bb36c7")
+#color_pal <- c("#36c764", "#c73699", "#3650c7", "#c7ac36", "#c7365f", "#bb36c7")
+color_pal <- c("#00AFBB", "#E7B800", "#FC4E07","#BB3099","#EE0099","#0000AC")
 
 # options for survival plot upper/lower expression cutoffs
 surv_expr_cutoffs <- seq(5, 50, by = 5)
@@ -605,10 +583,10 @@ server <- function(input, output, session) {
     if (assoc_method == "survival") {
       # survival plot
       plot_survival(dat, dataset_id, covariate, rv$plot_feature,
-                    input$select_survival_expr_cutoffs, color_pal, theme_dark)
+                    input$select_survival_expr_cutoffs, color_pal)
     } else {
       # violin plot
-      plot_categorical(dat, dataset_id, covariate, rv$plot_feature, color_pal, theme_dark)
+      plot_categorical(dat, dataset_id, covariate, rv$plot_feature, color_pal)
     }
   })
 
@@ -639,8 +617,7 @@ server <- function(input, output, session) {
         plts[[dat_name]] <- ggplot(dat_long, aes_string(gene1, gene2)) +
             geom_point() +
             geom_smooth(method = lm) +
-            ggtitle(sprintf("%s (cor = %0.2f)", dat_name, coex_cor)) +
-            theme_dark()
+            ggtitle(sprintf("%s (cor = %0.2f)", dat_name, coex_cor))
       }
     }
 
@@ -660,7 +637,7 @@ ui <- function(request) {
 
     navbarPage(
       id = "main",
-      theme = shinytheme("darkly"),
+      theme = shinytheme("flatly"),
       title = textOutput("page_title"),
       windowTitle = "MM25",
 
@@ -696,7 +673,7 @@ ui <- function(request) {
             width = 8,
             # uiOutput("feature_plot_tsv"),
             downloadLink("download_plot_data", "Download (.tsv)"),
-            withSpinner(plotOutput("feature_plot", height = "760px"))
+            withSpinner(plotOutput("feature_plot", height = "740px"))
           )
         )
       ),
