@@ -437,6 +437,10 @@ server <- function(input, output, session) {
   updateSelectizeInput(session, "select_coex_gene2", choices = grch38$symbol,
                        selected = "PBXIP1", server = TRUE)
 
+  observe({
+    updateSelectInput(session, "select_coex_experiment", choices=names(dataset_cfgs()))
+  })
+
   #
   # Event Hanlders
   #
@@ -590,7 +594,7 @@ server <- function(input, output, session) {
     }
   })
 
-  output$gene_coex_plots <- renderPlot({
+  output$gene_coex_plot <- renderPlot({
     req(gene_data())
     req(input$select_coex_gene1)
     req(input$select_coex_gene2)
@@ -598,30 +602,28 @@ server <- function(input, output, session) {
     gene1 <- input$select_coex_gene1
     gene2 <- input$select_coex_gene2
 
-    # iterate over datasets and generate a plot for each one including both genes
-    plts <- list()
+    dat_name <- input$select_coex_experiment
 
-    for (dat_name in names(gene_data())) {
-      dat <- gene_data()[[dat_name]] %>%
-        filter(symbol %in% c(gene1, gene2))
+    dat <- gene_data()[[dat_name]] %>%
+      filter(symbol %in% c(gene1, gene2))
 
-      if (nrow(dat) == 2) {
-        dat_long <- dat %>%
-          column_to_rownames('symbol') %>%
-          t() %>%
-          as.data.frame()
+    if (nrow(dat) == 2) {
+      dat_long <- dat %>%
+        column_to_rownames('symbol') %>%
+        t() %>%
+        as.data.frame()
 
-        # compute pearson correlation
-        coex_cor <- cor(dat_long[, 1], dat_long[, 2], use = 'pairwise.complete')
+      # compute pearson correlation
+      coex_cor <- cor(dat_long[, 1], dat_long[, 2], use = 'pairwise.complete')
 
-        plts[[dat_name]] <- ggplot(dat_long, aes_string(gene1, gene2)) +
-            geom_point() +
-            geom_smooth(method = lm) +
-            ggtitle(sprintf("%s (cor = %0.2f)", dat_name, coex_cor))
-      }
+      ggplot(dat_long, aes_string(gene1, gene2)) +
+          geom_point() +
+          geom_smooth(method = lm) +
+          ggtitle(sprintf("%s (cor = %0.2f)", dat_name, coex_cor))
+    } else {
+      # if both genes cannot be found in the dataset, for now, don't do anything..
+      NULL
     }
-
-    print(grid.arrange(grobs = plts, ncol = 2))
   })
 }
 
@@ -671,7 +673,6 @@ ui <- function(request) {
           ),
           column(
             width = 8,
-            # uiOutput("feature_plot_tsv"),
             downloadLink("download_plot_data", "Download (.tsv)"),
             withSpinner(plotOutput("feature_plot", height = "740px"))
           )
@@ -682,11 +683,13 @@ ui <- function(request) {
         column(
           width = 3,
           selectizeInput("select_coex_gene1", "Gene 1", choices = NULL),
-          selectizeInput("select_coex_gene2", "Gene 2", choices = NULL)
+          selectizeInput("select_coex_gene2", "Gene 2", choices = NULL),
+          selectizeInput("select_coex_experiment", "Experiment", choices = NULL)
+
         ),
         column(
           width = 9,
-          withSpinner(plotOutput("gene_coex_plots", height = "4000px"))
+          withSpinner(plotOutput("gene_coex_plot", height = "740px"))
         )
       ),
       tabPanel(
