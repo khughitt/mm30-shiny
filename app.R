@@ -1,5 +1,5 @@
 #
-# MM25 Shiny UI
+# MM29 Shiny UI
 #
 library(annotables)
 library(arrow)
@@ -34,7 +34,7 @@ surv_expr_cutoffs <- seq(5, 50, by = 5)
 names(surv_expr_cutoffs) <- paste0(surv_expr_cutoffs, " %")
 
 # load config
-cfg <- read_yaml("config/config-v3.2.yml")
+cfg <- read_yaml("config/config-v4.1.yml")
 
 # data subset options ("all", "disease stage", etc.)
 subset_opts <- names(cfg$mm25_scores$genes)
@@ -57,7 +57,7 @@ server <- function(input, output, session) {
   phenotype_metadata <- reactive({
     message("[phenotype_metadata]")
 
-    dataset_metadata <- read_tsv(cfg$dataset_metadata, col_types = cols())
+    dataset_metadata <- read_tsv(cfg$geo_metadata, col_types = cols())
 
     infile <- cfg$phenotype_metadata
     message(sprintf("[phenotype_metadata] loading %s", infile))
@@ -72,7 +72,7 @@ server <- function(input, output, session) {
 
     # work-around: manually add MMRF to dataset metadata
     dataset_metadata <- rbind(dataset_metadata,
-      c("MMRF", "MMRF CoMMpass Study IA14", NA, NA, NA, NA, NA, "GPL11154", NA,
+      c("MMRF", "MMRF CoMMpass Study IA18", NA, NA, NA, NA, NA, "GPL11154", NA,
         "https://research.themmrf.org/", "", ""))
 
     dataset_metadata <- dataset_metadata %>%
@@ -119,8 +119,8 @@ server <- function(input, output, session) {
   })
 
   # load MM25 combined pvals
-  mm25_gene_pvals_combined <- eventReactive(input$select_version_subset, {
-    infile <- cfg$mm25_scores$genes[[input$select_version_subset]]
+  mm25_gene_pvals_combined <- eventReactive(input$select_mm25_subset, {
+    infile <- cfg$mm25_scores$genes[[input$select_mm25_subset]]
 
     message(sprintf("[mm25_gene_pvals_combined] loading %s", infile))
 
@@ -134,9 +134,9 @@ server <- function(input, output, session) {
   })
 
   mm25_pathway_pvals_combined <- reactive({
-    req(input$select_version_subset)
+    req(input$select_mm25_subset)
 
-    infile <- cfg$mm25_scores$pathways[[input$select_version_subset]]
+    infile <- cfg$mm25_scores$pathways[[input$select_mm25_subset]]
 
     message(sprintf("[mm25_pathway_pvals_combined] loading %s", infile))
 
@@ -234,30 +234,33 @@ server <- function(input, output, session) {
     sort(unique(unlist(lapply(gene_data(), '[', 'symbol'))))
   })
 
-  # load individual dataset gene expression data;
+  # NOTE 2021-11-07:
+  # disabling bulk load and switching to lazy-loading approach for now
+  # to reduce memory requirements..
+  # load individual dataset pathway-level expression data;
   # used to generate pathway-level feature vs. phenotype plots
-  pathway_data <- reactive({
-    message("[pathway_data] init")
-
-    read_data <- function(x) {
-      message(sprintf("[pathway_data] loading %s", x))
-
-      if (endsWith(x, 'parquet')) {
-        read_parquet(x)
-      } else {
-        read_feather(x)
-      }
-    }
-
-    infiles <- lapply(dataset_cfgs(), function(x) {
-      x$features$gene_sets$rna
-    })
-
-    dat <- lapply(infiles, read_data)
-    names(dat) <- names(dataset_cfgs())
-
-    dat
-  })
+  # pathway_data <- reactive({
+  #   message("[pathway_data] init")
+  #
+  #   read_data <- function(x) {
+  #     message(sprintf("[pathway_data] loading %s", x))
+  #
+  #     if (endsWith(x, 'parquet')) {
+  #       read_parquet(x)
+  #     } else {
+  #       read_feather(x)
+  #     }
+  #   }
+  #
+  #   infiles <- lapply(dataset_cfgs(), function(x) {
+  #     x$features$gene_sets$rna
+  #   })
+  #
+  #   dat <- lapply(infiles, read_data)
+  #   names(dat) <- names(dataset_cfgs())
+  #
+  #   dat
+  # })
 
   pheno_data <- reactive({
     dat <- list()
@@ -328,7 +331,17 @@ server <- function(input, output, session) {
         select(-symbol) %>%
         as.numeric()
     } else {
-      feat_dat <- pathway_data()[[dataset_id]] %>%
+      # load pathway-level expression data
+      infile <- dataset_cfgs()[[dataset_id]]$features$gene_sets$rna
+
+      if (endsWith(infile, 'parquet')) {
+        pathway_expr <- read_parquet(infile)
+      } else {
+        pathway_expr <- read_feather(infile)
+      }
+
+      #feat_dat <- pathway_data()[[dataset_id]] %>%
+      feat_dat <- pathway_expr %>%
         filter(gene_set == rv$plot_feature) %>%
         select(-gene_set) %>%
         as.numeric()
@@ -350,11 +363,14 @@ server <- function(input, output, session) {
       event_dat <- pull(pheno_dat, assoc_cfg$params$event)
 
       data.frame(feature = feat_dat, time = time_dat, event = event_dat)
-    } else {
+    } else if (assoc_method == "logit") {
       # violin plot
       response <- factor(pull(pheno_data()[[dataset_id]], assoc_cfg$params$field))
-
       data.frame(feature = feat_dat, response)
+    } else if (assoc_method == "deseq") {
+      # TODO/NEXT STEPS...
+      # (DESeq plot?..)
+      data.frame()
     }
   })
 
@@ -367,7 +383,7 @@ server <- function(input, output, session) {
     tag_list <- tagList(
       tags$b(pheno_mdata$title),
       br(),
-      tags$b(tags$a(href=pheno_mdata$url, target='_blank', pheno_mdata$dataset)),
+      tags$b(tags$a(href=pheno_mdata$urls, target='_blank', pheno_mdata$dataset)),
       br()
     )
 
@@ -425,7 +441,7 @@ server <- function(input, output, session) {
   )
 
   # manually trigger subset selection
-  # updateSelectInput(session, "select_version_subset", "Data Subset:",
+  # updateSelectInput(session, "select_mm25_subset", "Data Subset:",
   #                   choices = subset_opts, selected = "all")
 
   # Using static set of GRCh38 genes from annotables; the datasets in MM25 also
@@ -446,11 +462,11 @@ server <- function(input, output, session) {
   #
 
   # version subset
-  observeEvent(input$select_version_subset, {
-    if (input$select_version_subset != 'loading...') {
+  observeEvent(input$select_mm25_subset, {
+    if (input$select_mm25_subset != 'loading...') {
       rv$plot_feature_level <- "genes"
 
-      message("observeEvent(input$select_version_subset)")
+      message("observeEvent(input$select_mm25_subset)")
 
       updateSelectInput(session, "select_plot_feature_level", "Feature Level:",
                         choices = feature_levels, selected = "genes")
@@ -458,7 +474,10 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$select_plot_feature_level, {
-    req(input$select_version_subset)
+    req(input$select_mm25_subset)
+
+    # save selected dataset/covariate
+    prev_covariate = rv$plot_covariate
 
     rv$plot_feature <- NULL
     rv$plot_covariate <- NULL
@@ -477,6 +496,12 @@ server <- function(input, output, session) {
     }
 
     updateSelectizeInput(session, "select_plot_feature", choices = select_choices, server = TRUE)
+
+    # set initial covariate & feature to trigger plot update (still not behaving as
+    # expected.. have to change covariate after switching to pathways for plot to be
+    # rendered..)
+    rv$plot_covariate <- prev_covariate
+    rv$plot_feature = select_choices[1]
   })
 
 
@@ -498,7 +523,7 @@ server <- function(input, output, session) {
   # Tables
   #
   output$mm25_gene_pvals_combined_table <- renderDataTable({
-    req(input$select_version_subset)
+    req(input$select_mm25_subset)
 
     # float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_wt"), "_pval")
     float_cols <- c("pval_adj")
@@ -532,7 +557,7 @@ server <- function(input, output, session) {
   })
 
   output$mm25_pathway_pvals_combined_table <- renderDataTable({
-    req(input$select_version_subset)
+    req(input$select_mm25_subset)
     # req(input$select_pathway_table_format)
 
     message("mm25_pathway_pvals_combined_table")
@@ -588,9 +613,12 @@ server <- function(input, output, session) {
       # survival plot
       plot_survival(dat, dataset_id, covariate, rv$plot_feature,
                     input$select_survival_expr_cutoffs, color_pal)
-    } else {
+    } else if (assoc_method == "logit") {
       # violin plot
       plot_categorical(dat, dataset_id, covariate, rv$plot_feature, color_pal)
+    } else if (assoc_method == "deseq") {
+      # TODO...
+      #plot_deseq(dat, dataset_id, covariate, rv$plot_feature, color_pal)
     }
   })
 
@@ -694,8 +722,8 @@ ui <- function(request) {
       ),
       tabPanel(
         "Settings",
-        # selectInput("select_version_subset", "Subset:", choices = NULL)
-        selectInput("select_version_subset", "Subset:", choices = subset_opts, selected = "all")
+        selectInput("select_mm25_subset", "Subset:", 
+                    choices = subset_opts, selected = "all")
       )
     )
   )
