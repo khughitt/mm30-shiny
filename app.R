@@ -12,6 +12,7 @@ library(plotly)
 library(shinythemes)
 library(shinycssloaders)
 library(survminer)
+library(svglite)
 library(tidyverse)
 library(yaml)
 
@@ -587,10 +588,42 @@ server <- function(input, output, session) {
     }
   )
 
+  output$download_plot_svg <- downloadHandler(
+      filename = function() {
+        # filename parts
+        pheno <- rv$plot_covariate
+        pheno <- sub("_pval", "", pheno)
+
+        sprintf("%s.svg", pheno)
+      },
+
+      content = function(file) {
+        svglite(file)
+        print(getFeatPlot())
+        dev.off()
+      }
+  )
+
+  output$download_plot_tiff <- downloadHandler(
+      filename = function() {
+        # filename parts
+        pheno <- rv$plot_covariate
+        pheno <- sub("_pval", "", pheno)
+
+        sprintf("%s.tiff", pheno)
+      },
+
+      content = function(file) {
+        tiff(file, width=6, height=5, res=300, units="in")
+        print(getFeatPlot())
+        dev.off()
+      }
+  )
+
   #
   # Plots
   #
-  output$feature_plot <- renderPlot({
+  featurePlot <- reactive({
     req(feature_plot_dat)
     req(rv$plot_covariate)
 
@@ -621,6 +654,11 @@ server <- function(input, output, session) {
       #plot_deseq(dat, dataset_id, covariate, rv$plot_feature, color_pal)
     }
   })
+  output$feature_plot <- renderPlot(featurePlot())
+
+  getFeatPlot <- function() {
+    featurePlot()
+  }
 
   output$gene_coex_plot <- renderPlot({
     req(gene_data())
@@ -701,7 +739,9 @@ ui <- function(request) {
           ),
           column(
             width = 8,
-            downloadLink("download_plot_data", "Download (.tsv)"),
+            downloadButton("download_plot_svg", "Download (.svg)"),
+            downloadButton("download_plot_tif", "Download (.tiff)"),
+            downloadButton("download_plot_data", "Download (.tsv)"),
             withSpinner(plotOutput("feature_plot", height = "740px"))
           )
         )
