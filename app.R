@@ -35,7 +35,7 @@ surv_expr_cutoffs <- seq(5, 50, by = 5)
 names(surv_expr_cutoffs) <- paste0(surv_expr_cutoffs, " %")
 
 # load config
-cfg <- read_yaml("config/config-v4.1.yml")
+cfg <- read_yaml("config/config-v4.2.yml")
 
 # data subset options ("all", "disease stage", etc.)
 subset_opts <- names(cfg$mm25_scores$genes)
@@ -80,7 +80,7 @@ server <- function(input, output, session) {
       rename(dataset = geo_id)
 
     dat <- dat %>%
-      inner_join(dataset_metadata, by = "dataset")
+      left_join(dataset_metadata, by = "dataset")
 
     # add covariate id
     # dat$covariate_id <- sprintf("%s_%s_pval", dat$dataset, dat$phenotype)
@@ -97,7 +97,7 @@ server <- function(input, output, session) {
       rename(covariate_id = covariate)
 
     dat <- dat %>%
-      inner_join(covariate_clusters, by = 'covariate_id')
+      left_join(covariate_clusters, by = 'covariate_id')
 
     # offset by one so that first cluster is "cluster 1" and convert to a factor
     dat$cluster <- factor(dat$cluster + 1)
@@ -547,7 +547,7 @@ server <- function(input, output, session) {
 
     # add gene cytogenetic bands
     dat <- dat %>%
-      inner_join(cyto_bands, by = 'symbol')
+      left_join(cyto_bands, by = 'symbol')
 
     # construct data table
     out <- DT::datatable(dat, style = "bootstrap", options = list(pageLength = 15))
