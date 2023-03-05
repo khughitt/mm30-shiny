@@ -146,7 +146,7 @@ server <- function(input, output, session) {
     # add links to msigdb pathway info pages
     msigdb_ids <- sub("[^_]*_", "", dat$gene_set)
 
-    msigdb_links <- sprintf("<a href='https://www.gsea-msigdb.org/gsea/msigdb/cards/%s' target='_blank'>%s</a>",
+    msigdb_links <- sprintf("<a href='http://www.gsea-msigdb.org/gsea/msigdb/geneset_page.jsp?geneSetName=%s' target='_blank'>%s</a>",
                             msigdb_ids, dat$gene_set)
     dat <- dat %>%
       add_column(pathway = msigdb_links, .before = 1) %>%
