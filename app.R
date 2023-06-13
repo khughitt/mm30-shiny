@@ -1,5 +1,5 @@
 #
-# MM29 Shiny UI
+# MM30 Shiny UI
 #
 library(annotables)
 library(arrow)
@@ -19,7 +19,7 @@ library(yaml)
 source("R/plotting.R")
 
 options(stringsAsFactors = FALSE)
-options(spinner.color="#00bc8c")
+options(spinner.color = "#00bc8c")
 options(scipen = 2, digits = 3)
 set.seed(1)
 
@@ -27,19 +27,18 @@ set.seed(1)
 feature_levels <- c(Genes = "genes", Pathways = "gene_sets")
 
 # plot colors
-#color_pal <- c("#36c764", "#c73699", "#3650c7", "#c7ac36", "#c7365f", "#bb36c7")
-color_pal <- c("#00AFBB", "#E7B800", "#FC4E07","#BB3099","#EE0099","#0000AC")
+color_pal <- c("#00AFBB", "#E7B800", "#FC4E07", "#BB3099", "#EE0099", "#0000AC")
 
 # options for survival plot upper/lower expression cutoffs
 surv_expr_cutoffs <- seq(5, 50, by = 5)
 names(surv_expr_cutoffs) <- paste0(surv_expr_cutoffs, " %")
 
 # load config
-cfg <- read_yaml("config/config-v4.2.yml")
+cfg <- read_yaml("config/config-v6.0.yml")
 
 # data subset options ("all", "disease stage", etc.)
-subset_opts <- names(cfg$mm25_scores$genes)
-names(subset_opts) <- Hmisc::capitalize(gsub('_', ' ', subset_opts))
+subset_opts <- names(cfg$mm30_scores$genes)
+names(subset_opts) <- Hmisc::capitalize(gsub("_", " ", subset_opts))
 
 #############################
 #
@@ -83,24 +82,10 @@ server <- function(input, output, session) {
       left_join(dataset_metadata, by = "dataset")
 
     # add covariate id
-    # dat$covariate_id <- sprintf("%s_%s_pval", dat$dataset, dat$phenotype)
     dat$covariate_id <- sprintf("%s_%s", dat$dataset, dat$phenotype)
 
     # add covariate category
     dat$category <- factor(dat$category)
-
-    # add covariate cluster
-    infile <- cfg$phenotype_clusters
-    message(sprintf("[phenotype_metadata] loading %s", infile))
-
-    covariate_clusters <- read_feather(infile) %>%
-      rename(covariate_id = covariate)
-
-    dat <- dat %>%
-      left_join(covariate_clusters, by = 'covariate_id')
-
-    # offset by one so that first cluster is "cluster 1" and convert to a factor
-    dat$cluster <- factor(dat$cluster + 1)
 
     # get the number of genes and samples in processed expression data
     num_genes   <- lapply(gene_data(), nrow)
@@ -110,7 +95,7 @@ server <- function(input, output, session) {
     dat$num_samples <- as.numeric(num_samples[dat$dataset])
 
     # add number of significant gene associations
-    num_sig_assoc <- apply(mm25_feature_padjs(), 2, function (x) {
+    num_sig_assoc <- apply(mm30_feature_padjs(), 2, function (x) {
       sum(x < 0.01, na.rm = TRUE)
     })
 
@@ -119,11 +104,11 @@ server <- function(input, output, session) {
     dat
   })
 
-  # load MM25 combined pvals
-  mm25_gene_pvals_combined <- eventReactive(input$select_mm25_subset, {
-    infile <- cfg$mm25_scores$genes[[input$select_mm25_subset]]
+  # load mm30 combined pvals
+  mm30_gene_pvals_combined <- eventReactive(input$select_mm30_subset, {
+    infile <- cfg$mm30_scores$genes[[input$select_mm30_subset]]
 
-    message(sprintf("[mm25_gene_pvals_combined] loading %s", infile))
+    message(sprintf("[mm30_gene_pvals_combined] loading %s", infile))
 
     dat <- read_feather(infile) %>%
       select(symbol, sumz_wt_pval, num_present, num_missing)
@@ -134,20 +119,20 @@ server <- function(input, output, session) {
       select(-sumz_wt_pval)
   })
 
-  mm25_pathway_pvals_combined <- reactive({
-    req(input$select_mm25_subset)
+  mm30_pathway_pvals_combined <- reactive({
+    req(input$select_mm30_subset)
 
-    infile <- cfg$mm25_scores$pathways[[input$select_mm25_subset]]
+    infile <- cfg$mm30_scores$pathways[[input$select_mm30_subset]]
 
-    message(sprintf("[mm25_pathway_pvals_combined] loading %s", infile))
+    message(sprintf("[mm30_pathway_pvals_combined] loading %s", infile))
 
     dat <- read_feather(infile)
 
     # add links to msigdb pathway info pages
-    msigdb_ids <- sub("[^_]*_", "", dat$gene_set)
+    #msigdb_ids <- sub("[^_]*_", "", dat$gene_set)
 
     msigdb_links <- sprintf("<a href='http://www.gsea-msigdb.org/gsea/msigdb/geneset_page.jsp?geneSetName=%s' target='_blank'>%s</a>",
-                            msigdb_ids, dat$gene_set)
+                            dat$gene_set, dat$gene_set)
     dat <- dat %>%
       add_column(pathway = msigdb_links, .before = 1) %>%
       select(pathway, gene_set, sumz_wt_pval, num_present, num_missing)
@@ -159,17 +144,17 @@ server <- function(input, output, session) {
   })
 
   # individual dataset p-values
-  mm25_gene_pvals_indiv <- read_feather(cfg$gene_pvals_indiv)
-  mm25_pathway_pvals_indiv <- read_feather(cfg$pathway_pvals_indiv)
+  mm30_gene_pvals_indiv <- read_feather(cfg$gene_pvals_indiv)
+  mm30_pathway_pvals_indiv <- read_feather(cfg$pathway_pvals_indiv)
 
-  mm25_feature_pvals <- reactive({
-    message("[mm25_feature_pvals]")
+  mm30_feature_pvals <- reactive({
+    message("[mm30_feature_pvals]")
 
     if (rv$plot_feature_level == 'genes') {
-      dat <- mm25_gene_pvals_indiv %>%
+      dat <- mm30_gene_pvals_indiv %>%
         rename(feature_id = symbol)
     } else {
-      dat <- mm25_pathway_pvals_indiv %>%
+      dat <- mm30_pathway_pvals_indiv %>%
         rename(feature_id = gene_set)
     }
 
@@ -179,16 +164,16 @@ server <- function(input, output, session) {
     dat
   })
 
-  mm25_feature_padjs <- reactive({
-    message("[mm25_feature_padjs]")
+  mm30_feature_padjs <- reactive({
+    message("[mm30_feature_padjs]")
 
-    mm25_feature_pvals() %>%
+    mm30_feature_pvals() %>%
       mutate_at(vars(-feature_id), p.adjust, method = "BH")
   })
 
   # list of covariates
   covariate_ids <- reactive({
-    colnames(mm25_feature_pvals())[-1]
+    colnames(mm30_feature_pvals())[-1]
   })
 
   # load individual dataset configs;
@@ -285,12 +270,12 @@ server <- function(input, output, session) {
   selected_feature_pvals <- reactive({
     req(rv$plot_feature)
 
-    mask <- mm25_feature_pvals()$feature_id == rv$plot_feature
+    mask <- mm30_feature_pvals()$feature_id == rv$plot_feature
 
     dat <- tibble(
       phenotype = covariate_ids(),
-      pval = as.numeric(mm25_feature_pvals()[mask, -1]),
-      padj = as.numeric(mm25_feature_padjs()[mask, -1])
+      pval = as.numeric(mm30_feature_pvals()[mask, -1]),
+      padj = as.numeric(mm30_feature_padjs()[mask, -1])
     )
 
     dat <- dat %>%
@@ -442,10 +427,10 @@ server <- function(input, output, session) {
   )
 
   # manually trigger subset selection
-  # updateSelectInput(session, "select_mm25_subset", "Data Subset:",
+  # updateSelectInput(session, "select_mm30_subset", "Data Subset:",
   #                   choices = subset_opts, selected = "all")
 
-  # Using static set of GRCh38 genes from annotables; the datasets in MM25 also
+  # Using static set of GRCh38 genes from annotables; the datasets in mm30 also
   # include some other gene symbols, but there are generally quite rare and not
   # likely to be of interest
   updateSelectizeInput(session, "select_coex_gene1", choices = grch38$symbol,
@@ -463,11 +448,11 @@ server <- function(input, output, session) {
   #
 
   # version subset
-  observeEvent(input$select_mm25_subset, {
-    if (input$select_mm25_subset != 'loading...') {
+  observeEvent(input$select_mm30_subset, {
+    if (input$select_mm30_subset != 'loading...') {
       rv$plot_feature_level <- "genes"
 
-      message("observeEvent(input$select_mm25_subset)")
+      message("observeEvent(input$select_mm30_subset)")
 
       updateSelectInput(session, "select_plot_feature_level", "Feature Level:",
                         choices = feature_levels, selected = "genes")
@@ -475,7 +460,7 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$select_plot_feature_level, {
-    req(input$select_mm25_subset)
+    req(input$select_mm30_subset)
 
     # save selected dataset/covariate
     prev_covariate = rv$plot_covariate
@@ -491,9 +476,9 @@ server <- function(input, output, session) {
 
 
     if (rv$plot_feature_level == "genes") {
-      select_choices <- as.character(mm25_gene_pvals_combined()$symbol)
+      select_choices <- as.character(mm30_gene_pvals_combined()$symbol)
     } else {
-      select_choices <- as.character(mm25_pathway_pvals_combined()$gene_set)
+      select_choices <- as.character(mm30_pathway_pvals_combined()$gene_set)
     }
 
     updateSelectizeInput(session, "select_plot_feature", choices = select_choices, server = TRUE)
@@ -523,13 +508,13 @@ server <- function(input, output, session) {
   #
   # Tables
   #
-  output$mm25_gene_pvals_combined_table <- renderDataTable({
-    req(input$select_mm25_subset)
+  output$mm30_gene_pvals_combined_table <- renderDataTable({
+    req(input$select_mm30_subset)
 
     # float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_wt"), "_pval")
     float_cols <- c("pval_adj")
 
-    dat <- mm25_gene_pvals_combined()
+    dat <- mm30_gene_pvals_combined()
 
     # add biotype and description
     gene_annot <- grch38 %>%
@@ -557,16 +542,16 @@ server <- function(input, output, session) {
 
   })
 
-  output$mm25_pathway_pvals_combined_table <- renderDataTable({
-    req(input$select_mm25_subset)
+  output$mm30_pathway_pvals_combined_table <- renderDataTable({
+    req(input$select_mm30_subset)
     # req(input$select_pathway_table_format)
 
-    message("mm25_pathway_pvals_combined_table")
+    message("mm30_pathway_pvals_combined_table")
 
     # float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_wt"), "_pval")
     float_cols <- c("pval_adj")
 
-    dat <- mm25_pathway_pvals_combined()
+    dat <- mm30_pathway_pvals_combined()
 
     # construct data table
     DT::datatable(dat %>% select(-gene_set),
@@ -707,15 +692,15 @@ ui <- function(request) {
       id = "main",
       theme = shinytheme("flatly"),
       title = textOutput("page_title"),
-      windowTitle = "MM25",
+      windowTitle = "mm30",
 
       tabPanel(
         "Genes",
-        withSpinner(dataTableOutput("mm25_gene_pvals_combined_table"))
+        withSpinner(dataTableOutput("mm30_gene_pvals_combined_table"))
       ),
       tabPanel(
         "Pathways",
-        withSpinner(dataTableOutput("mm25_pathway_pvals_combined_table"))
+        withSpinner(dataTableOutput("mm30_pathway_pvals_combined_table"))
       ),
       tabPanel(
         "Visualize",
@@ -762,7 +747,7 @@ ui <- function(request) {
       ),
       tabPanel(
         "Settings",
-        selectInput("select_mm25_subset", "Subset:", 
+        selectInput("select_mm30_subset", "Subset:", 
                     choices = subset_opts, selected = "all")
       )
     )

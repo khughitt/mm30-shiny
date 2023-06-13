@@ -1,0 +1,35 @@
+#
+# MM29 v4.2 configuration
+#
+
+# dataset config dir
+dataset_cfg_dir: '/data/configs'
+
+# metadata
+geo_metadata: '/data/metadata/geo_metadata.tsv'
+phenotype_metadata: '/data/metadata/association_metadata.feather'
+phenotype_clusters: '/data/metadata/mm25_gene_covariate_clusters.feather'
+cytogenetic_bands: '/data/metadata/grch38_cyto_bands.tsv'
+
+# individual covariate p-values
+gene_pvals_indiv: '/data/pvals/mm25_gene_association_pvals.feather'
+pathway_pvals_indiv: '/data/pvals/mm25_pathway_association_pvals.feather'
+
+# mm25 scores
+mm25_scores:
+  genes:
+    all: '/data/results/all/mm29_gene_scores.feather'
+    disease_stage: '/data/results/categories/mm29_gene_disease_stage_scores.feather'
+    survival: '/data/results/categories/mm29_gene_survival_scores.feather'
+    treatment: '/data/results/categories/mm29_gene_treatment_scores.feather'
+    cluster1: '/data/results/clusters/mm29_gene_0_scores.feather'
+    cluster2: '/data/results/clusters/mm29_gene_1_scores.feather'
+    cluster3: '/data/results/clusters/mm29_gene_2_scores.feather'
+  pathways:
+    all: '/data/results/all/mm29_pathway_scores.feather'
+    disease_stage: '/data/results/categories/mm29_pathway_disease_stage_scores.feather'
+    survival: '/data/results/categories/mm29_pathway_survival_scores.feather'
+    treatment: '/data/results/categories/mm29_pathway_treatment_scores.feather'
+    cluster1: '/data/results/clusters/mm29_pathway_0_scores.feather'
+    cluster2: '/data/results/clusters/mm29_pathway_1_scores.feather'
+    cluster3: '/data/results/clusters/mm29_pathway_2_scores.feather'

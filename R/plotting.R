@@ -15,7 +15,7 @@ plot_survival <- function(dat, dataset, covariate, feat_name, expr_cutoffs, colo
 
   dat$Expression <- ""
   dat$Expression[dat$feature <= expr_quantiles[1]] <- paste0("Lower ", names(expr_quantiles)[1])
-  dat$Expression[dat$feature >= expr_quantiles[2]] <- paste0("Upper ", names(expr_quantiles)[1]) 
+  dat$Expression[dat$feature >= expr_quantiles[2]] <- paste0("Upper ", names(expr_quantiles)[1])
 
   # determine units to use
   if (dataset %in% c("MMRF", "GSE7039", "GSE57317", "GSE9782")) {
@@ -43,7 +43,7 @@ plot_survival <- function(dat, dataset, covariate, feat_name, expr_cutoffs, colo
   fit <- survfit(Surv(time, event) ~ Expression, data = dat)
 
   # display a kaplan meier plot for result
-  ggsurvplot(fit, data = dat, ggtheme = theme_pubr(base_size=16), 
+  ggsurvplot(fit, data = dat, ggtheme = theme_pubr(base_size=16),
              palette = color_pal,
              title = plt_title,
              xlab = sprintf("Time (%s)", time_units),
