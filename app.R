@@ -1,5 +1,5 @@
 #
-# MM30 Shiny UI
+# MM30 Shiny App
 #
 library(annotables)
 library(arrow)
@@ -113,7 +113,7 @@ server <- function(input, output, session) {
     dat <- read_feather(infile) %>%
       select(symbol, sumz_wt_pval, num_present, num_missing)
 
-    dat$pval_adj <- p.adjust(dat$sumz_wt_pval, method='BH')
+    dat$pval_adj <- p.adjust(dat$sumz_wt_pval, method = "BH")
 
     dat %>%
       select(-sumz_wt_pval)
@@ -128,16 +128,13 @@ server <- function(input, output, session) {
 
     dat <- read_feather(infile)
 
-    # add links to msigdb pathway info pages
-    #msigdb_ids <- sub("[^_]*_", "", dat$gene_set)
-
     msigdb_links <- sprintf("<a href='http://www.gsea-msigdb.org/gsea/msigdb/geneset_page.jsp?geneSetName=%s' target='_blank'>%s</a>",
                             dat$gene_set, dat$gene_set)
     dat <- dat %>%
       add_column(pathway = msigdb_links, .before = 1) %>%
       select(pathway, gene_set, sumz_wt_pval, num_present, num_missing)
 
-    dat$pval_adj <- p.adjust(dat$sumz_wt_pval, method='BH')
+    dat$pval_adj <- p.adjust(dat$sumz_wt_pval, method = "BH")
 
     dat %>%
       select(-sumz_wt_pval)
@@ -150,7 +147,7 @@ server <- function(input, output, session) {
   mm30_feature_pvals <- reactive({
     message("[mm30_feature_pvals]")
 
-    if (rv$plot_feature_level == 'genes') {
+    if (rv$plot_feature_level == "genes") {
       dat <- mm30_gene_pvals_indiv %>%
         rename(feature_id = symbol)
     } else {
@@ -196,14 +193,6 @@ server <- function(input, output, session) {
       x$features$genes$rna
     })
 
-    # for GEO datasets, make sure to use non-redundant (nr) versions of expression data
-    # mask <- startsWith(names(gene_infiles), "GSE")
-    # gene_infiles[mask] <- sub(".feather", "_nr.feather", gene_infiles[mask])
-
-    # work-around (may 31, 2021)
-    # gene_infiles[mask] <- sub('/data/clean/geo/3.1', '/data/expr', gene_infiles[mask])
-    # gene_infiles <- sub("/data/clean/mmrf/IA15/rnaseq/", "/data/expr/MMRF/", gene_infiles)
-
     dat <- list()
 
     for (infile in gene_infiles) {
@@ -215,38 +204,29 @@ server <- function(input, output, session) {
     dat
   })
 
-  # list of all gene symbols
-  all_genes <- reactive({
-    sort(unique(unlist(lapply(gene_data(), '[', 'symbol'))))
+  # load gene-specific co-ex data
+  gene_coex <- reactive({
+    req(input$select_coex_gene1)
+    gene <- input$select_coex_gene1
+    expt_id <- input$select_coex_experiment
+
+    infile <- sprintf("/data/coex/%s.feather", gene)
+
+    if (!file.exists(infile)) {
+      return(data.frame())
+    }
+
+    dat <- read_feather(infile) %>%
+      filter(dataset == expt_id) %>%
+      select(-dataset)
+
+    dat
   })
 
-  # NOTE 2021-11-07:
-  # disabling bulk load and switching to lazy-loading approach for now
-  # to reduce memory requirements..
-  # load individual dataset pathway-level expression data;
-  # used to generate pathway-level feature vs. phenotype plots
-  # pathway_data <- reactive({
-  #   message("[pathway_data] init")
-  #
-  #   read_data <- function(x) {
-  #     message(sprintf("[pathway_data] loading %s", x))
-  #
-  #     if (endsWith(x, 'parquet')) {
-  #       read_parquet(x)
-  #     } else {
-  #       read_feather(x)
-  #     }
-  #   }
-  #
-  #   infiles <- lapply(dataset_cfgs(), function(x) {
-  #     x$features$gene_sets$rna
-  #   })
-  #
-  #   dat <- lapply(infiles, read_data)
-  #   names(dat) <- names(dataset_cfgs())
-  #
-  #   dat
-  # })
+  # list of all gene symbols
+  all_genes <- reactive({
+    sort(unique(unlist(lapply(gene_data(), "[", "symbol"))))
+  })
 
   pheno_data <- reactive({
     dat <- list()
@@ -311,7 +291,7 @@ server <- function(input, output, session) {
     covariate <- sub(paste0(dataset_id, "_"), "", pheno)
 
     # feature data
-    if (rv$plot_feature_level == 'genes') {
+    if (rv$plot_feature_level == "genes") {
       feat_dat <- gene_data()[[dataset_id]] %>%
         filter(symbol == rv$plot_feature) %>%
         select(-symbol) %>%
@@ -320,7 +300,7 @@ server <- function(input, output, session) {
       # load pathway-level expression data
       infile <- dataset_cfgs()[[dataset_id]]$features$gene_sets$rna
 
-      if (endsWith(infile, 'parquet')) {
+      if (endsWith(infile, "parquet")) {
         pathway_expr <- read_parquet(infile)
       } else {
         pathway_expr <- read_feather(infile)
@@ -369,7 +349,7 @@ server <- function(input, output, session) {
     tag_list <- tagList(
       tags$b(pheno_mdata$title),
       br(),
-      tags$b(tags$a(href=pheno_mdata$urls, target='_blank', pheno_mdata$dataset)),
+      tags$b(tags$a(href=pheno_mdata$urls, target="_blank", pheno_mdata$dataset)),
       br()
     )
 
@@ -420,7 +400,6 @@ server <- function(input, output, session) {
 
 
   rv <- reactiveValues(
-    # version_subset = NULL,
     plot_feature_level = NULL,
     plot_feature = NULL,
     plot_covariate = NULL
@@ -440,7 +419,8 @@ server <- function(input, output, session) {
                        selected = "PBXIP1", server = TRUE)
 
   observe({
-    updateSelectInput(session, "select_coex_experiment", choices=names(dataset_cfgs()))
+    updateSelectInput(session, "select_coex_experiment",
+                      choices = names(dataset_cfgs()))
   })
 
   #
@@ -449,7 +429,7 @@ server <- function(input, output, session) {
 
   # version subset
   observeEvent(input$select_mm30_subset, {
-    if (input$select_mm30_subset != 'loading...') {
+    if (input$select_mm30_subset != "loading...") {
       rv$plot_feature_level <- "genes"
 
       message("observeEvent(input$select_mm30_subset)")
@@ -511,7 +491,6 @@ server <- function(input, output, session) {
   output$mm30_gene_pvals_combined_table <- renderDataTable({
     req(input$select_mm30_subset)
 
-    # float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_wt"), "_pval")
     float_cols <- c("pval_adj")
 
     dat <- mm30_gene_pvals_combined()
@@ -527,12 +506,12 @@ server <- function(input, output, session) {
     gene_annot$description <- str_split(gene_annot$description, " \\[", simplify = TRUE)[, 1]
 
     dat <- dat %>%
-      left_join(gene_annot, by = 'symbol') %>%
+      left_join(gene_annot, by = "symbol") %>%
       select(symbol, biotype, everything())
 
     # add gene cytogenetic bands
     dat <- dat %>%
-      left_join(cyto_bands, by = 'symbol')
+      left_join(cyto_bands, by = "symbol")
 
     # construct data table
     out <- DT::datatable(dat, style = "bootstrap", options = list(pageLength = 15))
@@ -544,11 +523,9 @@ server <- function(input, output, session) {
 
   output$mm30_pathway_pvals_combined_table <- renderDataTable({
     req(input$select_mm30_subset)
-    # req(input$select_pathway_table_format)
 
     message("mm30_pathway_pvals_combined_table")
 
-    # float_cols <- paste0(c("min", "sumlog", "sumz", "sumz_wt"), "_pval")
     float_cols <- c("pval_adj")
 
     dat <- mm30_pathway_pvals_combined()
@@ -557,6 +534,20 @@ server <- function(input, output, session) {
     DT::datatable(dat %>% select(-gene_set),
                          style = "bootstrap", escape = FALSE,
                          options = list(pageLength = 15)) %>%
+      formatSignif(columns = float_cols, digits = 3)
+  })
+
+  output$mm30_gene_coex_table <- renderDataTable({
+    req(gene_coex())
+
+    float_cols <- c("cor", "cor_abs")
+
+    dat <- gene_coex()
+
+    # construct data table
+    DT::datatable(dat,
+                  style = "bootstrap", escape = FALSE,
+                  options = list(pageLength = 15)) %>%
       formatSignif(columns = float_cols, digits = 3)
   })
 
@@ -584,14 +575,13 @@ server <- function(input, output, session) {
 
       content = function(file) {
         svglite(file)
-        print(getFeatPlot())
+        print(get_feat_plot())
         dev.off()
       }
   )
 
   output$download_plot_tiff <- downloadHandler(
       filename = function() {
-        # filename parts
         pheno <- rv$plot_covariate
         pheno <- sub("_pval", "", pheno)
 
@@ -600,7 +590,7 @@ server <- function(input, output, session) {
 
       content = function(file) {
         tiff(file, width=6, height=5, res=300, units="in")
-        print(getFeatPlot())
+        print(get_feat_plot())
         dev.off()
       }
   )
@@ -641,10 +631,11 @@ server <- function(input, output, session) {
   })
   output$feature_plot <- renderPlot(featurePlot())
 
-  getFeatPlot <- function() {
+  get_feat_plot <- function() {
     featurePlot()
   }
 
+  # co-expression tab
   output$gene_coex_plot <- renderPlot({
     req(gene_data())
     req(input$select_coex_gene1)
@@ -660,12 +651,12 @@ server <- function(input, output, session) {
 
     if (nrow(dat) == 2) {
       dat_long <- dat %>%
-        column_to_rownames('symbol') %>%
+        column_to_rownames("symbol") %>%
         t() %>%
         as.data.frame()
 
       # compute pearson correlation
-      coex_cor <- cor(dat_long[, 1], dat_long[, 2], use = 'pairwise.complete')
+      coex_cor <- cor(dat_long[, 1], dat_long[, 2])
 
       ggplot(dat_long, aes_string(gene1, gene2)) +
           geom_point() +
@@ -737,17 +728,27 @@ ui <- function(request) {
           width = 3,
           selectizeInput("select_coex_gene1", "Gene 1", choices = NULL),
           selectizeInput("select_coex_gene2", "Gene 2", choices = NULL),
-          selectizeInput("select_coex_experiment", "Experiment", choices = NULL)
+          selectizeInput("select_coex_experiment", "Experiment", choices = NULL),
+          hr(),
+          helpText("If present, the table lists the top 100 most highly co-expressed genes with ",
+                   "\"gene1\" in the selected dataset.",
+                   "At present, only a subset of the top ~25% of genes with the highest variance ",
+                   "are included in the analysis; In the future, this will be expanded to ",
+                   "include all genes present in the dataset."),
 
         ),
         column(
-          width = 9,
+          width = 3,
           withSpinner(plotOutput("gene_coex_plot", height = "740px"))
+        ),
+        column(
+          width = 3,
+          withSpinner(dataTableOutput("mm30_gene_coex_table"))
         )
       ),
       tabPanel(
         "Settings",
-        selectInput("select_mm30_subset", "Subset:", 
+        selectInput("select_mm30_subset", "Subset:",
                     choices = subset_opts, selected = "all")
       )
     )
