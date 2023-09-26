@@ -5,6 +5,12 @@
 # dataset config dir
 dataset_cfg_dir: '/data/configs'
 
+# plot colors
+colors: ["#00AFBB", "#E7B800", "#FC4E07", "#BB3099", "#EE0099", "#0000AC"]
+
+# survival plot upper/lower percentil cutoff choices
+surv_cutoff_opts: [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
+
 # metadata
 geo_metadata: '/data/metadata/geo_metadata.tsv'
 phenotype_metadata: '/data/metadata/association_metadata.feather'

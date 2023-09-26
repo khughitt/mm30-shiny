@@ -26,15 +26,12 @@ set.seed(1)
 # feature levels
 feature_levels <- c(Genes = "genes", Pathways = "gene_sets")
 
-# plot colors
-color_pal <- c("#00AFBB", "#E7B800", "#FC4E07", "#BB3099", "#EE0099", "#0000AC")
-
-# options for survival plot upper/lower expression cutoffs
-surv_expr_cutoffs <- seq(5, 50, by = 5)
-names(surv_expr_cutoffs) <- paste0(surv_expr_cutoffs, " %")
-
 # load config
 cfg <- read_yaml("config/config-v6.0.yml")
+
+# options for survival plot upper/lower expression cutoffs
+surv_expr_cutoffs <- cfg$surv_cutoff_opts
+names(surv_expr_cutoffs) <- paste0(surv_expr_cutoffs, " %")
 
 # data subset options ("all", "disease stage", etc.)
 subset_opts <- names(cfg$mm30_scores$genes)
@@ -71,9 +68,9 @@ server <- function(input, output, session) {
     }
 
     # work-around: manually add MMRF to dataset metadata
-    dataset_metadata <- rbind(dataset_metadata,
-      c("MMRF", "MMRF CoMMpass Study IA18", NA, NA, NA, NA, NA, "GPL11154", NA,
-        "https://research.themmrf.org/", "", ""))
+    dataset_metadata <- rbind(dataset_metadata, c("MMRF", "MMRF CoMMpass Study IA18", NA, NA, NA,
+                                                  NA, NA, "GPL11154", NA,
+                                                  "https://research.themmrf.org/", "", ""))
 
     dataset_metadata <- dataset_metadata %>%
       rename(dataset = geo_id)
@@ -95,7 +92,7 @@ server <- function(input, output, session) {
     dat$num_samples <- as.numeric(num_samples[dat$dataset])
 
     # add number of significant gene associations
-    num_sig_assoc <- apply(mm30_feature_padjs(), 2, function (x) {
+    num_sig_assoc <- apply(mm30_feature_padjs(), 2, function(x) {
       sum(x < 0.01, na.rm = TRUE)
     })
 
@@ -128,7 +125,8 @@ server <- function(input, output, session) {
 
     dat <- read_feather(infile)
 
-    msigdb_links <- sprintf("<a href='http://www.gsea-msigdb.org/gsea/msigdb/geneset_page.jsp?geneSetName=%s' target='_blank'>%s</a>",
+    msigdb_links <- sprintf("<a href='%s?geneSetName=%s' target='_blank'>%s</a>",
+                            "http://www.gsea-msigdb.org/gsea/msigdb/geneset_page.jsp",
                             dat$gene_set, dat$gene_set)
     dat <- dat %>%
       add_column(pathway = msigdb_links, .before = 1) %>%
@@ -317,10 +315,6 @@ server <- function(input, output, session) {
     assoc_cfg <- dataset_cfgs()[[dataset_id]]$phenotypes$associations[[covariate]]
     assoc_method <- assoc_cfg$method
 
-    # assoc_method <- phenotype_metadata() %>%
-    #   filter(dataset == dataset_id & phenotype == covariate) %>%
-    #   pull(method)
-
     if (assoc_method == "survival") {
       # survival plot
       pheno_dat <- pheno_data()[[dataset_id]]
@@ -349,7 +343,7 @@ server <- function(input, output, session) {
     tag_list <- tagList(
       tags$b(pheno_mdata$title),
       br(),
-      tags$b(tags$a(href=pheno_mdata$urls, target="_blank", pheno_mdata$dataset)),
+      tags$b(tags$a(href = pheno_mdata$urls, target = "_blank", pheno_mdata$dataset)),
       br()
     )
 
@@ -443,7 +437,7 @@ server <- function(input, output, session) {
     req(input$select_mm30_subset)
 
     # save selected dataset/covariate
-    prev_covariate = rv$plot_covariate
+    prev_covariate <- rv$plot_covariate
 
     rv$plot_feature <- NULL
     rv$plot_covariate <- NULL
@@ -467,7 +461,7 @@ server <- function(input, output, session) {
     # expected.. have to change covariate after switching to pathways for plot to be
     # rendered..)
     rv$plot_covariate <- prev_covariate
-    rv$plot_feature = select_choices[1]
+    rv$plot_feature <- select_choices[1]
   })
 
 
@@ -620,13 +614,13 @@ server <- function(input, output, session) {
     if (assoc_method == "survival") {
       # survival plot
       plot_survival(dat, dataset_id, covariate, rv$plot_feature,
-                    input$select_survival_expr_cutoffs, color_pal)
+                    input$select_survival_expr_cutoffs, cfg$colors)
     } else if (assoc_method == "logit") {
       # violin plot
-      plot_categorical(dat, dataset_id, covariate, rv$plot_feature, color_pal)
+      plot_categorical(dat, dataset_id, covariate, rv$plot_feature, cfg$colors)
     } else if (assoc_method == "deseq") {
       # TODO...
-      #plot_deseq(dat, dataset_id, covariate, rv$plot_feature, color_pal)
+      #plot_deseq(dat, dataset_id, covariate, rv$plot_feature, cfg$colors)
     }
   })
   output$feature_plot <- renderPlot(featurePlot())
@@ -708,7 +702,7 @@ ui <- function(request) {
             helpText("Phenotype / covariate to compare feature expression or SNP counts against."),
             hr(),
             selectInput("select_survival_expr_cutoffs", "Upper/Lower Feature Expression Cutoffs:",
-                        choices=surv_expr_cutoffs, selected = 25),
+                        choices = surv_expr_cutoffs, selected = 25),
             helpText("Upper and lower feature expression percentile cutoffs to use for two survival groups."),
             hr(),
             uiOutput("covariate_summary")
