@@ -40,14 +40,12 @@ plot_survival <- function(dat, dataset, covariate, feat_name, expr_cutoffs, colo
   plt_title <- sprintf("%s: %s vs. %s (n = %d)", dataset, cov_label, feat_name, num_samples)
 
   # perform fit on binarized data
-  fit <- survfit(Surv(time, event) ~ Expression, data = dat)
+  fit <- survival::survfit(survival::Surv(time, event) ~ Expression, data = dat)
 
   # display a kaplan meier plot for result
-  ggsurvplot(fit, data = dat, ggtheme = theme_pubr(base_size=16),
-             palette = color_pal,
-             title = plt_title,
-             xlab = sprintf("Time (%s)", time_units),
-             legend = "bottom", legend.title = "Legend")
+  survminer::ggsurvplot(fit, data = dat, ggtheme = theme_pubr(base_size = 16), palette = color_pal,
+                        title = plt_title, xlab = sprintf("Time (%s)", time_units),
+                        legend = "bottom", legend.title = "Legend")
 
 }
 
@@ -95,7 +93,7 @@ plot_deseq <- function(dat, dataset, covariate, feat_name, color_pal) {
     scale_fill_manual(values = color_pal) +
     scale_color_manual(values = color_pal) +
     ggtitle(sprintf("%s: %s vs. %s", dataset, feat_name, covariate)) +
-    theme_pubr(base_size=16) +
+    theme_pubr(base_size = 16) +
     xlab(covariate) +
     ylab(sprintf("%s expression", feat_name))
 }

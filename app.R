@@ -23,19 +23,57 @@ options(spinner.color = "#00bc8c")
 options(scipen = 2, digits = 3)
 set.seed(1)
 
+data_dir <- "/data"
+
 # feature levels
 feature_levels <- c(Genes = "genes", Pathways = "gene_sets")
 
 # load config
 cfg <- read_yaml("config/config-v6.0.yml")
 
+# table options
+tableOpts <- list(pageLength = 15)
+
 # options for survival plot upper/lower expression cutoffs
 surv_expr_cutoffs <- cfg$surv_cutoff_opts
 names(surv_expr_cutoffs) <- paste0(surv_expr_cutoffs, " %")
 
 # data subset options ("all", "disease stage", etc.)
-subset_opts <- names(cfg$mm30_scores$genes)
+subset_opts <- c("all", "disease_stage", "survival", "treatment")
 names(subset_opts) <- Hmisc::capitalize(gsub("_", " ", subset_opts))
+
+# load metadata
+gene_mdata <- read_tsv(file.path(data_dir, "metadata/genes.tsv"), col_types = cols())
+covariates <- read_yaml(file.path(data_dir, "metadata/covariates.yml"))
+
+# load mm30 dataset column metadata
+col_mdata <- list()
+
+for (acc in names(covariates)) {
+  if (acc == "MMRF") {
+    infile <- file.path(data_dir, "mmrf/column-metadata.feather")
+  } else {
+    infile <- file.path(data_dir, sprintf("geo/%s/column-metadata.feather", acc))
+  }
+  col_mdata[[acc]] <- read_feather(infile)
+}
+
+# load mm30 individual GEO/MMRF gene expression datasets
+geo_dir <- file.path(data_dir, "geo")
+
+mm30_expr <- list()
+
+for (acc in list.files(geo_dir)) {
+  mm30_expr[[acc]] <- read_feather(file.path(geo_dir, acc, "data.feather"))
+}
+mm30_expr[["MMRF"]] <- read_feather(file.path(data_dir, "mmrf", "data.feather"))
+
+# load dataset + covariate metadata
+covariate_mdata <- read_feather(file.path(data_dir, "metadata/covariates.feather"))
+
+message("===========================================")
+message("Initializing..")
+message("===========================================")
 
 #############################
 #
@@ -47,63 +85,10 @@ server <- function(input, output, session) {
   # Reactives
   #
 
-  # gene cytogenetic band mapping
-  cyto_bands <- read_tsv(cfg$cytogenetic_bands, col_types = cols())
-
-  # load dataset and covariate metadata
-  phenotype_metadata <- reactive({
-    message("[phenotype_metadata]")
-
-    dataset_metadata <- read_tsv(cfg$geo_metadata, col_types = cols())
-
-    infile <- cfg$phenotype_metadata
-    message(sprintf("[phenotype_metadata] loading %s", infile))
-
-    dat <- read_feather(infile)
-
-    if ("feature_level" %in% colnames(dat)) {
-      dat <- dat %>%
-        filter(feature_level == "genes") %>%
-        select(-feature_level)
-    }
-
-    # work-around: manually add MMRF to dataset metadata
-    dataset_metadata <- rbind(dataset_metadata, c("MMRF", "MMRF CoMMpass Study IA18", NA, NA, NA,
-                                                  NA, NA, "GPL11154", NA,
-                                                  "https://research.themmrf.org/", "", ""))
-
-    dataset_metadata <- dataset_metadata %>%
-      rename(dataset = geo_id)
-
-    dat <- dat %>%
-      left_join(dataset_metadata, by = "dataset")
-
-    # add covariate id
-    dat$covariate_id <- sprintf("%s_%s", dat$dataset, dat$phenotype)
-
-    # add covariate category
-    dat$category <- factor(dat$category)
-
-    # get the number of genes and samples in processed expression data
-    num_genes   <- lapply(gene_data(), nrow)
-    num_samples <- lapply(gene_data(), ncol)
-
-    dat$num_genes   <- as.numeric(num_genes[dat$dataset])
-    dat$num_samples <- as.numeric(num_samples[dat$dataset])
-
-    # add number of significant gene associations
-    num_sig_assoc <- apply(mm30_feature_padjs(), 2, function(x) {
-      sum(x < 0.01, na.rm = TRUE)
-    })
-
-    dat$num_sig_assoc <- num_sig_assoc[match(dat$covariate_id, names(num_sig_assoc))]
-
-    dat
-  })
-
   # load mm30 combined pvals
   mm30_gene_pvals_combined <- eventReactive(input$select_mm30_subset, {
-    infile <- cfg$mm30_scores$genes[[input$select_mm30_subset]]
+    infile <- file.path(data_dir, "mm30", "results",
+                        sprintf("gene_scores_%s.feather", input$select_mm30_subset))
 
     message(sprintf("[mm30_gene_pvals_combined] loading %s", infile))
 
@@ -119,7 +104,8 @@ server <- function(input, output, session) {
   mm30_pathway_pvals_combined <- reactive({
     req(input$select_mm30_subset)
 
-    infile <- cfg$mm30_scores$pathways[[input$select_mm30_subset]]
+    infile <- file.path(data_dir, "mm30", "results",
+                        sprintf("pathway_scores_%s.feather", input$select_mm30_subset))
 
     message(sprintf("[mm30_pathway_pvals_combined] loading %s", infile))
 
@@ -139,8 +125,10 @@ server <- function(input, output, session) {
   })
 
   # individual dataset p-values
-  mm30_gene_pvals_indiv <- read_feather(cfg$gene_pvals_indiv)
-  mm30_pathway_pvals_indiv <- read_feather(cfg$pathway_pvals_indiv)
+  mm30_gene_pvals_indiv <- read_feather(file.path(data_dir,
+                                                  "mm30/fassoc/gene_association_pvals.feather"))
+  mm30_pathway_pvals_indiv <- read_feather(file.path(data_dir,
+                                                  "mm30/fassoc/pathway_association_pvals.feather"))
 
   mm30_feature_pvals <- reactive({
     message("[mm30_feature_pvals]")
@@ -153,9 +141,6 @@ server <- function(input, output, session) {
         rename(feature_id = gene_set)
     }
 
-    # backwards-compat (v1.0 - v1.1)
-    colnames(dat) <- sub("_pval$", "", colnames(dat))
-
     dat
   })
 
@@ -166,49 +151,13 @@ server <- function(input, output, session) {
       mutate_at(vars(-feature_id), p.adjust, method = "BH")
   })
 
-  # list of covariates
-  covariate_ids <- reactive({
-    colnames(mm30_feature_pvals())[-1]
-  })
-
-  # load individual dataset configs;
-  # TODO: store all needed paths, etc. in phenotype metadata file instead,
-  # if possible
-  dataset_cfgs <- reactive({
-    cfg_infiles <- Sys.glob(file.path(cfg$dataset_cfg_dir, "*.yml"))
-    cfgs <- lapply(cfg_infiles, read_yaml)
-    names(cfgs) <- sapply(cfgs, "[[", "name")
-
-    cfgs
-  })
-
-  # load individual dataset gene expression data;
-  # used to generate gene-level feature vs. phenotype plots
-  gene_data <- reactive({
-    message("[gene_data] init")
-
-    gene_infiles <- lapply(dataset_cfgs(), function(x) {
-      x$features$genes$rna
-    })
-
-    dat <- list()
-
-    for (infile in gene_infiles) {
-      message(sprintf("[gene_data] loading %s", infile))
-      dat[[infile]] <- read_feather(infile)
-    }
-    names(dat) <- names(dataset_cfgs())
-
-    dat
-  })
-
   # load gene-specific co-ex data
   gene_coex <- reactive({
     req(input$select_coex_gene1)
     gene <- input$select_coex_gene1
     expt_id <- input$select_coex_experiment
 
-    infile <- sprintf("/data/coex/%s.feather", gene)
+    infile <- file.path(data_dir, sprintf("coex/%s.feather", gene))
 
     if (!file.exists(infile)) {
       return(data.frame())
@@ -223,35 +172,20 @@ server <- function(input, output, session) {
 
   # list of all gene symbols
   all_genes <- reactive({
-    sort(unique(unlist(lapply(gene_data(), "[", "symbol"))))
-  })
-
-  pheno_data <- reactive({
-    dat <- list()
-
-    for (dataset_id in names(dataset_cfgs())) {
-      dataset_cfg <- dataset_cfgs()[[dataset_id]]
-      infile <- dataset_cfg$phenotypes$path
-
-      message(sprintf("[pheno_data] loading %s", infile))
-
-      if (endsWith(infile, "tsv") || endsWith(infile, "tsv.gz")) {
-        dat[[dataset_id]] <- read_tsv(infile, col_types = cols())
-      } else if (endsWith(infile, "feather")) {
-        dat[[dataset_id]] <- read_feather(infile)
-      }
-    }
-
-    dat
+    sort(unique(unlist(lapply(mm30_expr, "[", "symbol"))))
   })
 
   selected_feature_pvals <- reactive({
     req(rv$plot_feature)
 
+    message("[selected_feature_pvals]")
+
     mask <- mm30_feature_pvals()$feature_id == rv$plot_feature
 
+    covariate_ids <- colnames(mm30_feature_pvals())[-1]
+
     dat <- tibble(
-      phenotype = covariate_ids(),
+      phenotype = covariate_ids,
       pval = as.numeric(mm30_feature_pvals()[mask, -1]),
       padj = as.numeric(mm30_feature_padjs()[mask, -1])
     )
@@ -260,7 +194,7 @@ server <- function(input, output, session) {
       arrange(pval)
   })
 
-  selected_phenotype_metadata <- reactive({
+  selected_covariate_mdata <- reactive({
     req(rv$plot_covariate)
 
     # determine selected dataset / covariate
@@ -268,7 +202,7 @@ server <- function(input, output, session) {
     pheno <- sub("_pval", "", sub(paste0(dataset_id, "_"), "", rv$plot_covariate))
 
     # retrieve relevant metadata
-    phenotype_metadata() %>%
+    covariate_mdata %>%
       filter(dataset ==  dataset_id & phenotype == pheno)
   })
 
@@ -282,7 +216,7 @@ server <- function(input, output, session) {
     pheno <- rv$plot_covariate
 
     # backwards-compatibility
-    pheno <- sub("_pval", "", pheno)
+    # pheno <- sub("_pval", "", pheno)
 
     # get dataset and covariate names
     dataset_id <- unlist(str_split(pheno, "_"))[1]
@@ -290,19 +224,20 @@ server <- function(input, output, session) {
 
     # feature data
     if (rv$plot_feature_level == "genes") {
-      feat_dat <- gene_data()[[dataset_id]] %>%
+      feat_dat <- mm30_expr[[dataset_id]] %>%
         filter(symbol == rv$plot_feature) %>%
         select(-symbol) %>%
         as.numeric()
     } else {
       # load pathway-level expression data
-      infile <- dataset_cfgs()[[dataset_id]]$features$gene_sets$rna
+      message("......")
+      message(dataset_id)
+      message("......")
 
-      if (endsWith(infile, "parquet")) {
-        pathway_expr <- read_parquet(infile)
-      } else {
-        pathway_expr <- read_feather(infile)
-      }
+      data_subdir <- ifelse(dataset_id == "MMRF", "mmrf", file.path("geo", dataset_id))
+
+      infile <- file.path(data_dir, data_subdir, "data_pathways.feather")
+      pathway_expr <- read_feather(infile)
 
       #feat_dat <- pathway_data()[[dataset_id]] %>%
       feat_dat <- pathway_expr %>%
@@ -312,20 +247,21 @@ server <- function(input, output, session) {
     }
 
     # get config for selected feature-phenotype association
-    assoc_cfg <- dataset_cfgs()[[dataset_id]]$phenotypes$associations[[covariate]]
-    assoc_method <- assoc_cfg$method
+    covariate_info <- covariates[[dataset_id]][[covariate]]
+
+    assoc_method <- covariate_info$method
 
     if (assoc_method == "survival") {
       # survival plot
-      pheno_dat <- pheno_data()[[dataset_id]]
+      pheno_dat <- col_mdata[[dataset_id]]
 
-      time_dat <- pull(pheno_dat, assoc_cfg$params$time)
-      event_dat <- pull(pheno_dat, assoc_cfg$params$event)
+      time_dat <- pull(pheno_dat, covariate_info$params$time)
+      event_dat <- pull(pheno_dat, covariate_info$params$event)
 
       data.frame(feature = feat_dat, time = time_dat, event = event_dat)
     } else if (assoc_method == "logit") {
       # violin plot
-      response <- factor(pull(pheno_data()[[dataset_id]], assoc_cfg$params$field))
+      response <- factor(pull(col_mdata[[dataset_id]], covariate_info$params$field))
       data.frame(feature = feat_dat, response)
     } else if (assoc_method == "deseq") {
       # TODO/NEXT STEPS...
@@ -338,18 +274,18 @@ server <- function(input, output, session) {
   # html output
   #
   output$covariate_summary <- renderUI({
-    pheno_mdata <- selected_phenotype_metadata()
+    mdata <- selected_covariate_mdata()
 
     tag_list <- tagList(
-      tags$b(pheno_mdata$title),
+      tags$b(mdata$title),
       br(),
-      tags$b(tags$a(href = pheno_mdata$urls, target = "_blank", pheno_mdata$dataset)),
+      tags$b(tags$a(href = mdata$urls, target = "_blank", mdata$dataset)),
       br()
     )
 
-    if (!is.na(pheno_mdata$name)) {
-      authors <- str_to_title(str_match(pheno_mdata$name, "[[:alpha:]]+"))
-      year <- str_split(pheno_mdata$submission_date, " ", simplify = TRUE)[, 3]
+    if (!is.na(mdata$name)) {
+      authors <- str_to_title(str_match(mdata$name, "[[:alpha:]]+"))
+      year <- str_split(mdata$submission_date, " ", simplify = TRUE)[, 3]
 
       attribution <- sprintf("%s (%s)", authors, year)
       tag_list <- tagAppendChildren(tag_list, attribution, br())
@@ -358,17 +294,17 @@ server <- function(input, output, session) {
     tag_list <- tagAppendChildren(
       tag_list,
       "# Samples:",
-      tags$b(pheno_mdata$num_samples),
+      tags$b(mdata$num_samples),
       br(),
       "# Genes:",
-      tags$b(pheno_mdata$num_genes),
+      tags$b(mdata$num_genes),
       br()
     )
 
-    if (!is.na(pheno_mdata$overall_design)) {
+    if (!is.na(mdata$overall_design)) {
       tag_list <- tagAppendChildren(tag_list, hr(),
                                     tags$b("Overall Design:"), br(),
-                                    pheno_mdata$abstract, br())
+                                    mdata$abstract, br())
     }
 
     tags$div(tag_list)
@@ -414,7 +350,7 @@ server <- function(input, output, session) {
 
   observe({
     updateSelectInput(session, "select_coex_experiment",
-                      choices = names(dataset_cfgs()))
+                      choices = names(covariates))
   })
 
   #
@@ -501,18 +437,18 @@ server <- function(input, output, session) {
 
     dat <- dat %>%
       left_join(gene_annot, by = "symbol") %>%
-      select(symbol, biotype, everything())
+      select(symbol, biotype, everything()) %>%
+      rownames_to_column("rank")
+
+    dat$rank <- as.numeric(dat$rank)
 
     # add gene cytogenetic bands
     dat <- dat %>%
-      left_join(cyto_bands, by = "symbol")
+      left_join(gene_mdata, by = "symbol")
 
     # construct data table
-    out <- DT::datatable(dat, style = "bootstrap", options = list(pageLength = 15))
-
-    out <- out %>%
+    DT::datatable(dat, style = "bootstrap", rownames = FALSE, options = tableOpts) %>%
         formatSignif(columns = float_cols, digits = 3)
-
   })
 
   output$mm30_pathway_pvals_combined_table <- renderDataTable({
@@ -524,10 +460,14 @@ server <- function(input, output, session) {
 
     dat <- mm30_pathway_pvals_combined()
 
+    dat <- dat %>%
+      select(-gene_set) %>%
+      rownames_to_column("rank")
+
+    dat$rank <- as.numeric(dat$rank)
+
     # construct data table
-    DT::datatable(dat %>% select(-gene_set),
-                         style = "bootstrap", escape = FALSE,
-                         options = list(pageLength = 15)) %>%
+    DT::datatable(dat, style = "bootstrap", escape = FALSE, rownames = FALSE, options = tableOpts) %>%
       formatSignif(columns = float_cols, digits = 3)
   })
 
@@ -539,9 +479,7 @@ server <- function(input, output, session) {
     dat <- gene_coex()
 
     # construct data table
-    DT::datatable(dat,
-                  style = "bootstrap", escape = FALSE,
-                  options = list(pageLength = 15)) %>%
+    DT::datatable(dat, style = "bootstrap", escape = FALSE, options = tableOpts) %>%
       formatSignif(columns = float_cols, digits = 3)
   })
 
@@ -583,7 +521,7 @@ server <- function(input, output, session) {
       },
 
       content = function(file) {
-        tiff(file, width=6, height=5, res=300, units="in")
+        tiff(file, width = 6, height = 5, res = 300, units = "in")
         print(get_feat_plot())
         dev.off()
       }
@@ -605,9 +543,9 @@ server <- function(input, output, session) {
     dataset_id <- unlist(str_split(pheno, "_"))[1]
     covariate <- sub(paste0(dataset_id, "_"), "", pheno)
 
-    # get config for selected feature-phenotype association
-    assoc_cfg <- dataset_cfgs()[[dataset_id]]$phenotypes$associations[[covariate]]
-    assoc_method <- assoc_cfg$method
+    # get covariate info for selected feature-phenotype association
+    covariate_info <- covariates[[dataset_id]][[covariate]]
+    assoc_method <- covariate_info$method
 
     dat <- feature_plot_dat()
 
@@ -631,7 +569,7 @@ server <- function(input, output, session) {
 
   # co-expression tab
   output$gene_coex_plot <- renderPlot({
-    req(gene_data())
+    req(mm30_expr)
     req(input$select_coex_gene1)
     req(input$select_coex_gene2)
 
@@ -640,7 +578,7 @@ server <- function(input, output, session) {
 
     dat_name <- input$select_coex_experiment
 
-    dat <- gene_data()[[dat_name]] %>%
+    dat <- mm30_expr[[dat_name]] %>%
       filter(symbol %in% c(gene1, gene2))
 
     if (nrow(dat) == 2) {
