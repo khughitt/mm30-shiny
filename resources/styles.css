@@ -2,6 +2,13 @@ body {
     padding: 10px
 }
 
+.posAssoc {
+  color: #ff8888;
+}
+.negAssoc {
+  color: #8888ff;
+}
+
 /** work-around until req() can be properly set up.. **/
-.shiny-output-error { visibility: hidden; }
-.shiny-output-error:before { visibility: hidden; }
+/**.shiny-output-error { visibility: hidden; }
+.shiny-output-error:before { visibility: hidden; }**/
