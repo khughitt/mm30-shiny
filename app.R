@@ -35,15 +35,10 @@ cfg <- read_yaml("config/config-v6.0.yml")
 # table options
 tableOpts <- list(pageLength = 15)
 
-# float_cols <- c("all", "disease_stage", "survival", "treatment", "cell_line", "patient")
-# float_cols <- c("all", "treatment", "cell_line", "patient")
-float_cols <- c("all", "treatment")
-
-# human-readable column names
-# geneColNames <- c("Symbol", "Description", "Biotype", "Chr", "Cell Cycle Phase",
+# human-readable column names (includes placeholders for hidden names)
 geneColNames <- c("Symbol", "Biotype", "Chr", "Cell Cycle Phase",
-                  "All", "Disease Stage", "Survival", "Treatment", # "Cell Lines", "Patients",
-                  "# Samples")
+                  "HIDDEN1", "HIDDEN2", "HIDDEN3", "HIDDEN4",
+                  "Total", "Disease Stage", "Survival", "Treatment")
 
 covariateOpts <- c("All" = "all", "Disease Stage" = "disease_stage", "Survival" = "survival",
                    "Treatment" = "treatment")
@@ -51,10 +46,6 @@ covariateOpts <- c("All" = "all", "Disease Stage" = "disease_stage", "Survival" 
 # options for survival plot upper/lower expression cutoffs
 surv_expr_cutoffs <- cfg$surv_cutoff_opts
 names(surv_expr_cutoffs) <- paste0(surv_expr_cutoffs, " %")
-
-# data subset options ("all", "disease stage", etc.)
-# subset_opts <- c("all", "disease_stage", "survival", "treatment")
-# names(subset_opts) <- Hmisc::capitalize(gsub("_", " ", subset_opts))
 
 # load mm30 gene/pathways scores
 mm30_genes <- read_feather(file.path(data_dir, "mm30", "mm30_gene_scores.feather")) %>%
@@ -94,9 +85,6 @@ for (acc in list.files(geo_dir)) {
 }
 mm30_expr[["MMRF"]] <- read_feather(file.path(data_dir, "mmrf", "data.feather"))
 
-# list of all gene symbols
-#all_genes <- sort(unique(unlist(lapply(mm30_expr, "[", "symbol"))))
-
 # load dataset + covariate metadata
 covariate_mdata <- read_feather(file.path(data_dir, "metadata/covariates.feather"))
 
@@ -106,7 +94,7 @@ mm30_gene_pvals_indiv <- read_feather(file.path(data_dir,
 mm30_pathway_pvals_indiv <- read_feather(file.path(data_dir,
                                                 "mm30/pathway_association_pvals.feather"))
 
-# table headers
+# table headers (colspan include 4 hidden columns)
 geneTableHeader <- htmltools::withTags(table(
   class = "display",
   thead(
@@ -115,7 +103,7 @@ geneTableHeader <- htmltools::withTags(table(
       th(rowspan = 2, "Biotype"),
       th(rowspan = 2, "Chr"),
       th(rowspan = 2, "Cell Cycle Phase"),
-      th(colspan = 4, align = "center", "Gene Associations (Rank / Padj)"),
+      th(colspan = 8, "Gene Associations (Rank / Padj)"),
     ),
     tr(
        th("All Covariates"),
@@ -456,19 +444,20 @@ server <- function(input, output, session) {
     gene_annot$description <- str_split(gene_annot$description, " \\[", simplify = TRUE)[, 1]
 
     dat <- mm30_genes %>%
+      select(-num_datasets) %>%
       left_join(gene_annot, by = "symbol")
-      #rownames_to_column("rank")
-
-    #dat$rank <- as.numeric(dat$rank)
 
     # add gene annotations
     dat <- dat %>%
       left_join(gene_mdata, by = "symbol")
 
-    # dat <- dat %>%
-    #   select(rank, symbol, description, biotype, chr_region, cell_cycle_phase, everything())
+    # add covariate ranks
+    dat$all_rank <- rank(dat$all, ties.method = "first")
+    dat$disease_stage_rank <- rank(dat$disease_stage, ties.method = "first")
+    dat$survival_rank <- rank(dat$survival, ties.method = "first")
+    dat$treatment_rank <- rank(dat$treatment, ties.method = "first")
+
     dat <- dat %>%
-      # select(rank, symbol, biotype, chr_region, cell_cycle_phase, everything())
       select(-description) %>%
       select(symbol, biotype, chr_region, cell_cycle_phase, everything())
 
@@ -480,22 +469,40 @@ server <- function(input, output, session) {
     posAssoc <- "<span class='posAssoc'>⬆</span>"
     negAssoc <- "<span class='negAssoc'>⬇</span>"
 
-    dat$disease_stage <- sprintf("%s (%s)",
-                                 format(dat$disease_stage),
-                                 ifelse(dat$disease_stage_coef > 0, posAssoc, negAssoc))
+    dat$all_formatted <- sprintf("%-6d (%s)", dat$all_rank, format(dat$all))
 
-    dat$survival <- sprintf("%s (%s)",
-                            format(dat$survival),
-                            ifelse(dat$survival_coef < 0, posAssoc, negAssoc))
+    dat$disease_stage_formatted <- sprintf("%-6d (%s) %s",
+                                           dat$disease_stage_rank,
+                                           format(dat$disease_stage),
+                                           ifelse(dat$disease_stage_coef > 0, posAssoc, negAssoc))
+
+    dat$survival_formatted <- sprintf("%-6d (%s) %s",
+                                      dat$survival_rank,
+                                      format(dat$survival),
+                                      ifelse(dat$survival_coef < 0, posAssoc, negAssoc))
+
+
+    dat$treatment_formatted <- sprintf("%-6d (%s)", dat$treatment_rank, format(dat$treatment))
 
     dat <- dat %>%
-      select(-disease_stage_coef, -survival_coef)
+      select(-disease_stage_coef, -survival_coef, -all_rank, -survival_rank, -disease_stage_rank,
+             -treatment_rank)
 
-    DT::datatable(dat, style = "bootstrap", rownames = FALSE,
-                  #colnames = geneColNames,
-                  container = geneTableHeader,
-                  escape = FALSE, options = tableOpts) %>%
-        formatSignif(columns = float_cols, digits = 3)
+    opts <- list(
+      pageLength = 15,
+      columnDefs = list(
+        list(orderData = 4, targets = 8),
+        list(orderData = 5, targets = 9),
+        list(orderData = 6, targets = 10),
+        list(orderData = 7, targets = 11),
+        list(visible = FALSE, targets = 4:7)
+      )
+    )
+
+    DT::datatable(dat, style = "bootstrap", colnames = geneColNames, rownames = FALSE,
+                  escape = FALSE, options = opts)
+    # disabling for now; conflicts with columnDefs used for sorting formatting fields
+    #container = geneTableHeader,
   })
 
   output$mm30_pathway_pvals_combined_table <- renderDataTable({
@@ -509,6 +516,8 @@ server <- function(input, output, session) {
     dat$rank <- as.numeric(dat$rank)
 
     # construct data table
+    float_cols <- c("all", "treatment")
+
     DT::datatable(dat, style = "bootstrap", escape = FALSE, rownames = FALSE, options = tableOpts) %>%
       formatSignif(columns = float_cols, digits = 3)
   })
