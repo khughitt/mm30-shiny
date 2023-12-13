@@ -27,29 +27,31 @@ set.seed(1)
 data_dir <- "../data"
 
 # feature levels
-feature_levels <- c(Genes = "genes", Pathways = "pathways")
+feature_types <- c(Genes = "genes", Pathways = "pathways")
 
 # load config
-cfg <- read_yaml("config/config-v6.0.yml")
+cfg <- read_yaml("config/config-v7.0.yml")
 
 # table options
 tableOpts <- list(pageLength = 15)
 
-# human-readable column names (includes placeholders for hidden names)
+# human-readable column names (includes placeholders for hidden names);
+# hidden fields are used to store unformatted values
 geneColNames <- c("Symbol", "Biotype", "Chr", "Cell Cycle Phase",
-                  "HIDDEN1", "HIDDEN2", "HIDDEN3", "HIDDEN4",
-                  "Total", "Disease Stage", "Survival", "Treatment")
+                  "HIDDEN1", "HIDDEN2", "HIDDEN3", "HIDDEN4", "HIDDEN5",
+                  "Total", "Disease Stage", "Survival (OS)",
+                  "Survival (PFS)", "Treatment Response")
 
-covariateOpts <- c("All" = "all", "Disease Stage" = "disease_stage", "Survival" = "survival",
-                   "Treatment" = "treatment")
+covariateOpts <- c("All" = "all", "Disease Stage" = "disease_stage", "Survival (OS)" = "survival_os",
+                   "Survival (PFS)" = "survival_pfs",
+                   "Treatment Response" = "treatment_response")
 
 # options for survival plot upper/lower expression cutoffs
 surv_expr_cutoffs <- cfg$surv_cutoff_opts
 names(surv_expr_cutoffs) <- paste0(surv_expr_cutoffs, " %")
 
 # load mm30 gene/pathways scores
-mm30_genes <- read_feather(file.path(data_dir, "mm30", "mm30_gene_scores.feather")) %>%
-  select(-cell_line, -patient)
+mm30_genes <- read_feather(file.path(data_dir, "mm30", "mm30_gene_scores.feather"))
 
 mm30_pathways <- read_feather(file.path(data_dir, "mm30", "mm30_pathway_scores.feather"))
 
@@ -90,11 +92,11 @@ covariate_mdata <- read_feather(file.path(data_dir, "metadata/covariates.feather
 
 # individual dataset p-values
 mm30_gene_pvals_indiv <- read_feather(file.path(data_dir,
-                                                "mm30/gene_association_pvals.feather"))
+                                                "fassoc/gene_association_pvals.feather"))
 mm30_pathway_pvals_indiv <- read_feather(file.path(data_dir,
-                                                "mm30/pathway_association_pvals.feather"))
+                                                "fassoc/pathway_association_pvals.feather"))
 
-# table headers (colspan include 4 hidden columns)
+# table headers (colspan include 5 hidden columns)
 geneTableHeader <- htmltools::withTags(table(
   class = "display",
   thead(
@@ -108,8 +110,9 @@ geneTableHeader <- htmltools::withTags(table(
     tr(
        th("All Covariates"),
        th("Disease Stage"),
-       th("Survival"),
-       th("Treatment")
+       th("Survival (OS)"),
+       th("Survival (PFS)"),
+       th("Treatment Response")
     )
   )
 ))
@@ -127,10 +130,61 @@ server <- function(input, output, session) {
   #
   # Reactives
   #
+  gene_df <- reactive({
+    # add biotype and description
+    gene_annot <- grch38 %>%
+      select(symbol, description, biotype) %>%
+      group_by(symbol) %>%
+      slice(1) %>%
+      ungroup()
+
+    # remove the source info from gene description
+    gene_annot$description <- str_split(gene_annot$description, " \\[", simplify = TRUE)[, 1]
+
+    dat <- mm30_genes %>%
+      select(-num_datasets) %>%
+      left_join(gene_annot, by = "symbol")
+
+    # add gene annotations
+    dat <- dat %>%
+      left_join(gene_mdata, by = "symbol")
+
+    # add covariate ranks
+    dat$all_rank <- rank(dat$all, ties.method = "first")
+    dat$disease_stage_rank <- rank(dat$disease_stage, ties.method = "first")
+    dat$survival_os_rank <- rank(dat$survival_os, ties.method = "first")
+    dat$survival_pfs_rank <- rank(dat$survival_pfs, ties.method = "first")
+    dat$treatment_rank <- rank(dat$treatment_response, ties.method = "first")
+
+    dat <- dat %>%
+      select(-description) %>%
+      select(symbol, biotype, chr_region, cell_cycle_phase, everything())
+
+    dat$all_formatted <- sprintf("%-6d (%s)", dat$all_rank, format(dat$all))
+
+    dat$disease_stage_formatted <- sprintf("%-6d (%s)",
+                                           dat$disease_stage_rank,
+                                           format(dat$disease_stage))
+
+    dat$survival_os_formatted <- sprintf("%-6d (%s)",
+                                      dat$survival_os_rank,
+                                      format(dat$survival_os))
+
+    dat$survival_pfs_formatted <- sprintf("%-6d (%s)",
+                                      dat$survival_pfs_rank,
+                                      format(dat$survival_pfs))
+
+
+    dat$treatment_formatted <- sprintf("%-6d (%s)", dat$treatment_rank, format(dat$treatment_response))
+
+    dat %>% select(-disease_stage_coef, -survival_coef, -all_rank, -survival_os_rank,
+                   -survival_pfs_rank, -disease_stage_rank, -treatment_rank)
+  })
+
   mm30_plot_pvals <- reactive({
     message("[mm30_plot_pvals]")
 
-    if (rv$plot_feature_level == "genes") {
+    if (rv$plot_feature_type == "genes") {
       dat <- mm30_gene_pvals_indiv %>%
         rename(feature_id = symbol)
     } else {
@@ -149,9 +203,9 @@ server <- function(input, output, session) {
 
   # load gene-specific co-ex data
   gene_coex <- reactive({
-    req(input$select_coex_gene1)
-    gene <- input$select_coex_gene1
-    expt_id <- input$select_coex_experiment
+    req(input$coex_gene1)
+    gene <- input$coex_gene1
+    expt_id <- input$coex_experiment
 
     message("[gene_coex]")
 
@@ -201,7 +255,7 @@ server <- function(input, output, session) {
 
   feature_plot_dat <- reactive({
     req(rv$plot_covariate)
-    req(input$select_survival_expr_cutoffs)
+    req(input$survival_cutoff_percentile)
 
     message("[feature_plot_dat]")
 
@@ -212,7 +266,7 @@ server <- function(input, output, session) {
     covariate <- sub(paste0(dataset_id, "_"), "", pheno)
 
     # feature data
-    if (rv$plot_feature_level == "genes") {
+    if (rv$plot_feature_type == "genes") {
       feat_dat <- mm30_expr[[dataset_id]] %>%
         filter(symbol == rv$plot_feature) %>%
         select(-symbol) %>%
@@ -237,6 +291,10 @@ server <- function(input, output, session) {
 
     # get config for selected feature-phenotype association
     covariate_info <- covariates[[dataset_id]][[covariate]]
+
+    if (is.null(covariate_info)) {
+      stop("Error retrieving covariate info!")
+    }
 
     assoc_method <- covariate_info$method
 
@@ -277,6 +335,17 @@ server <- function(input, output, session) {
   #
   # html output
   #
+  output$gene_info <- renderUI({
+    message("output$gene_info")
+
+    tag_list <- tagList(
+      tags$b(rv$selected_gene),
+      br()
+    )
+
+    tags$div(tag_list)
+  })
+
   output$covariate_summary <- renderUI({
     message("output$covariate_summary")
 
@@ -319,10 +388,10 @@ server <- function(input, output, session) {
   #
   # Form fields
   #
-  output$select_plot_covariate <- renderUI({
+  output$plot_covariate <- renderUI({
     req(rv$plot_feature)
 
-    message("output$select_plot_covariate")
+    message("output$plot_covariate")
 
     dat <- selected_feature_pvals()
 
@@ -334,14 +403,15 @@ server <- function(input, output, session) {
                            dat$padj)
     # TODO (Oct 9, 2023): Add dropdown menu to choose subset for plots...
 
-    selectInput("select_plot_covariate", "Covariate:", choices = opts)
+    selectInput("plot_covariate", "Covariate:", choices = opts)
   })
 
 
   rv <- reactiveValues(
-    plot_feature_level = NULL,
+    plot_feature_type = NULL,
     plot_feature = NULL,
-    plot_covariate = NULL
+    plot_covariate = NULL,
+    selected_gene = "",
   )
 
   # manually trigger subset selection
@@ -351,40 +421,29 @@ server <- function(input, output, session) {
   # Using static set of GRCh38 genes from annotables; the datasets in mm30 also
   # include some other gene symbols, but there are generally quite rare and not
   # likely to be of interest
-  updateSelectizeInput(session, "select_coex_gene1", choices = grch38$symbol,
+  updateSelectizeInput(session, "coex_gene1", choices = grch38$symbol,
                        selected = "MCL1", server = TRUE)
 
-  updateSelectizeInput(session, "select_coex_gene2", choices = grch38$symbol,
+  updateSelectizeInput(session, "coex_gene2", choices = grch38$symbol,
                        selected = "PBXIP1", server = TRUE)
 
   observe({
-    updateSelectInput(session, "select_coex_experiment",  choices = names(covariates))
+    updateSelectInput(session, "coex_experiment",  choices = names(covariates))
   })
 
   #
   # Event Hanlders
   #
+  observeEvent(input$mm30_gene_pvals_combined_table_row_last_clicked, {
+    ind <- input$mm30_gene_pvals_combined_table_row_last_clicked
+    target_gene <- gene_df()$symbol[ind]
 
-  # version subset
-  # observeEvent(input$select_mm30_subset, {
-  #   if (input$select_mm30_subset != "loading...") {
-  #     rv$plot_feature_level <- "genes"
-  #
-  #     message("observeEvent(input$select_mm30_subset)")
-  #
-  #     updateSelectInput(session, "select_plot_feature_level", "Feature Level:",
-  #                       choices = feature_levels, selected = "genes")
-  #   }
-  # })
+    rv$selected_gene <- ifelse(rv$selected_gene == target_gene, "", target_gene)
+  })
 
-  # observe({
-  #   updateSelectInput(session, "select_plot_feature_level", "Feature Level:",
-  #                     choices = feature_levels, selected = "genes")
-  # })
 
-  observeEvent(input$select_plot_feature_level, {
-    # req(input$select_mm30_subset)
-    message("observeEvent(input$select_plot_feature_level)")
+  observeEvent(input$feature_type, {
+    message("observeEvent(input$feature_type)")
 
     # save selected dataset/covariate
     prev_covariate <- rv$plot_covariate
@@ -392,19 +451,19 @@ server <- function(input, output, session) {
     rv$plot_feature <- NULL
     rv$plot_covariate <- NULL
 
-    message(input$select_plot_feature_level)
+    message(input$feature_type)
 
-    if (input$select_plot_feature_level != "") {
-      rv$plot_feature_level <- input$select_plot_feature_level
+    if (input$feature_type != "") {
+      rv$plot_feature_type <- input$feature_type
     }
 
-    if (rv$plot_feature_level == "genes") {
+    if (rv$plot_feature_type == "genes") {
       select_choices <- as.character(mm30_genes$symbol)
     } else {
       select_choices <- as.character(mm30_pathways$pathway)
     }
 
-    updateSelectizeInput(session, "select_plot_feature", choices = select_choices, server = TRUE)
+    updateSelectizeInput(session, "feature", choices = select_choices, server = TRUE)
 
     # set initial covariate & feature to trigger plot update (still not behaving as
     # expected.. have to change covariate after switching to pathways for plot to be
@@ -413,94 +472,47 @@ server <- function(input, output, session) {
     rv$plot_feature <- select_choices[1]
   })
 
-  observeEvent(input$select_plot_covariate, {
-    message("observeEvent(input$select_plot_covariate)")
-    rv$plot_covariate <- input$select_plot_covariate
+  observeEvent(input$plot_covariate, {
+    message("observeEvent(input$plot_covariate)")
+    rv$plot_covariate <- input$plot_covariate
   })
 
-  observeEvent(input$select_plot_feature, {
-    req(input$select_plot_feature_level)
+  observeEvent(input$feature, {
+    req(input$feature_type)
 
-    message("observeEvent(input$select_plot_feature)")
+    message("observeEvent(input$feature)")
 
     rv$plot_covariate <- NULL
-    rv$plot_feature <- input$select_plot_feature
+    rv$plot_feature <- input$feature
   })
 
   #
   # Tables
   #
   output$mm30_gene_pvals_combined_table <- renderDataTable({
+    req(gene_df())
+
     message("output$mm30_gene_pvals_combined_table")
-
-    # add biotype and description
-    gene_annot <- grch38 %>%
-      select(symbol, description, biotype) %>%
-      group_by(symbol) %>%
-      slice(1) %>%
-      ungroup()
-
-    # remove the source info from gene description
-    gene_annot$description <- str_split(gene_annot$description, " \\[", simplify = TRUE)[, 1]
-
-    dat <- mm30_genes %>%
-      select(-num_datasets) %>%
-      left_join(gene_annot, by = "symbol")
-
-    # add gene annotations
-    dat <- dat %>%
-      left_join(gene_mdata, by = "symbol")
-
-    # add covariate ranks
-    dat$all_rank <- rank(dat$all, ties.method = "first")
-    dat$disease_stage_rank <- rank(dat$disease_stage, ties.method = "first")
-    dat$survival_rank <- rank(dat$survival, ties.method = "first")
-    dat$treatment_rank <- rank(dat$treatment, ties.method = "first")
-
-    dat <- dat %>%
-      select(-description) %>%
-      select(symbol, biotype, chr_region, cell_cycle_phase, everything())
-
-    # colors to use
-    colorPos <- "red"  # "#ff8888"
-    colorNeg <- "blue" # "#8888ff"
-
-    # positive / negative association indicators
-    posAssoc <- "<span class='posAssoc'>⬆</span>"
-    negAssoc <- "<span class='negAssoc'>⬇</span>"
-
-    dat$all_formatted <- sprintf("%-6d (%s)", dat$all_rank, format(dat$all))
-
-    dat$disease_stage_formatted <- sprintf("%-6d (%s) %s",
-                                           dat$disease_stage_rank,
-                                           format(dat$disease_stage),
-                                           ifelse(dat$disease_stage_coef > 0, posAssoc, negAssoc))
-
-    dat$survival_formatted <- sprintf("%-6d (%s) %s",
-                                      dat$survival_rank,
-                                      format(dat$survival),
-                                      ifelse(dat$survival_coef < 0, posAssoc, negAssoc))
-
-
-    dat$treatment_formatted <- sprintf("%-6d (%s)", dat$treatment_rank, format(dat$treatment))
-
-    dat <- dat %>%
-      select(-disease_stage_coef, -survival_coef, -all_rank, -survival_rank, -disease_stage_rank,
-             -treatment_rank)
 
     opts <- list(
       pageLength = 15,
       columnDefs = list(
-        list(orderData = 4, targets = 8),
-        list(orderData = 5, targets = 9),
-        list(orderData = 6, targets = 10),
-        list(orderData = 7, targets = 11),
-        list(visible = FALSE, targets = 4:7)
+        list(orderData = 4, targets = 9),
+        list(orderData = 5, targets = 10),
+        list(orderData = 6, targets = 11),
+        list(orderData = 7, targets = 12),
+        list(visible = FALSE, targets = 4:8)
       )
     )
 
-    DT::datatable(dat, style = "bootstrap", colnames = geneColNames, rownames = FALSE,
-                  escape = FALSE, options = opts)
+    DT::datatable(gene_df(),
+                  style = "bootstrap",
+                  escape = FALSE,
+                  colnames = geneColNames,
+                  rownames = FALSE,
+                  selection = "single",
+                  options = opts)
+
     # disabling for now; conflicts with columnDefs used for sorting formatting fields
     #container = geneTableHeader,
   })
@@ -516,7 +528,7 @@ server <- function(input, output, session) {
     dat$rank <- as.numeric(dat$rank)
 
     # construct data table
-    float_cols <- c("all", "treatment")
+    float_cols <- c("all", "treatment_response")
 
     DT::datatable(dat, style = "bootstrap", escape = FALSE, rownames = FALSE, options = tableOpts) %>%
       formatSignif(columns = float_cols, digits = 3)
@@ -606,7 +618,7 @@ server <- function(input, output, session) {
       # survival plot
       message("1) plot_survival")
       plot_survival(dat, dataset_id, covariate, rv$plot_feature,
-                    input$select_survival_expr_cutoffs, cfg$colors)
+                    input$survival_cutoff_percentile, cfg$colors)
     } else if (assoc_method == "logit") {
       # violin plot
       message("2) plot_categorical")
@@ -626,13 +638,13 @@ server <- function(input, output, session) {
   # co-expression tab
   output$gene_coex_plot <- renderPlot({
     req(mm30_expr)
-    req(input$select_coex_gene1)
-    req(input$select_coex_gene2)
+    req(input$coex_gene1)
+    req(input$coex_gene2)
 
-    gene1 <- input$select_coex_gene1
-    gene2 <- input$select_coex_gene2
+    gene1 <- input$coex_gene1
+    gene2 <- input$coex_gene2
 
-    dat_name <- input$select_coex_experiment
+    dat_name <- input$coex_experiment
 
     dat <- mm30_expr[[dat_name]] %>%
       filter(symbol %in% c(gene1, gene2))
@@ -655,6 +667,40 @@ server <- function(input, output, session) {
       NULL
     }
   })
+
+  # bookmarking support
+  observe({
+    reactiveValuesToList(input)
+    session$doBookmark()
+  })
+  onBookmarked(updateQueryString)
+
+  setBookmarkExclude(c(
+    "mm30_gene_pvals_combined_table_rows_selected",
+    "mm30_gene_pvals_combined_table_columns_selected",
+    "mm30_gene_pvals_combined_table_cells_selected",
+    "mm30_gene_pvals_combined_table_rows_current",
+    "mm30_gene_pvals_combined_table_rows_all",
+    "mm30_gene_pvals_combined_table_state",
+    "mm30_gene_pvals_combined_table_search",
+    "mm30_gene_pvals_combined_table_cell_clicked",
+    "mm30_pathway_pvals_combined_table_rows_selected",
+    "mm30_pathway_pvals_combined_table_columns_selected",
+    "mm30_pathway_pvals_combined_table_cells_selected",
+    "mm30_pathway_pvals_combined_table_rows_current",
+    "mm30_pathway_pvals_combined_table_rows_all",
+    "mm30_pathway_pvals_combined_table_state",
+    "mm30_pathway_pvals_combined_table_search",
+    "mm30_pathway_pvals_combined_table_cell_clicked",
+    "mm30_gene_coex_table_rows_selected",
+    "mm30_gene_coex_table_columns_selected",
+    "mm30_gene_coex_table_cells_selected",
+    "mm30_gene_coex_table_rows_current",
+    "mm30_gene_coex_table_rows_all",
+    "mm30_gene_coex_table_state",
+    "mm30_gene_coex_table_search",
+    "mm30_gene_coex_table_cell_clicked"
+  ))
 }
 
 ui <- function(request) {
@@ -668,14 +714,21 @@ ui <- function(request) {
     ),
 
     navbarPage(
-      id = "main",
+      id = "tab",
       theme = shinytheme("flatly"),
       title = textOutput("page_title"),
       windowTitle = "mm30",
 
       tabPanel(
         "Genes",
-        #selectInput("select_gene_covariates", "Ranking", choices = covariateOpts, selected = "all"),
+        conditionalPanel(
+          condition = "typeof input.mm30_gene_pvals_combined_table_rows_selected  !== 'undefined' 
+                           && input.mm30_gene_pvals_combined_table_rows_selected.length > 0",
+          column(
+            width = 4,
+            uiOutput("gene_info")
+          )
+        ),
         withSpinner(dataTableOutput("mm30_gene_pvals_combined_table"))
       ),
       tabPanel(
@@ -687,17 +740,17 @@ ui <- function(request) {
         fluidRow(
           column(
             width = 4,
-            selectInput("select_plot_feature_level", "Feature Level:", choices = feature_levels,
+            selectInput("feature_type", "Feature Level:", choices = feature_types,
                         selected = "genes"),
             helpText("Feature level to visualize."),
             hr(),
-            selectizeInput("select_plot_feature", "Feature:", choices = NULL),
+            selectizeInput("feature", "Feature:", choices = NULL),
             helpText("Feature to visualize."),
             hr(),
-            uiOutput("select_plot_covariate"),
+            uiOutput("plot_covariate"),
             helpText("Phenotype / covariate to compare feature expression or SNP counts against."),
             hr(),
-            selectInput("select_survival_expr_cutoffs", "Upper/Lower Feature Expression Cutoffs:",
+            selectInput("survival_cutoff_percentile", "Upper/Lower Feature Expression Cutoffs:",
                         choices = surv_expr_cutoffs, selected = 25),
             helpText("Upper and lower feature expression percentile cutoffs to use for two survival groups."),
             hr(),
@@ -716,9 +769,9 @@ ui <- function(request) {
         "Co-expression",
         column(
           width = 3,
-          selectizeInput("select_coex_gene1", "Gene 1", choices = NULL),
-          selectizeInput("select_coex_gene2", "Gene 2", choices = NULL),
-          selectizeInput("select_coex_experiment", "Experiment", choices = NULL),
+          selectizeInput("coex_gene1", "Gene 1", choices = NULL),
+          selectizeInput("coex_gene2", "Gene 2", choices = NULL),
+          selectizeInput("coex_experiment", "Experiment", choices = NULL),
           hr(),
           helpText("If present, the table lists the top 100 most highly co-expressed genes with ",
                    "\"gene1\" in the selected dataset.",
