@@ -66,6 +66,7 @@ plot_categorical <- function(dat, dataset, covariate, feat_name, color_pal) {
 
   ggplot(dat, aes(x = response, y = feature)) +
     geom_violin(aes(fill = response, color = response), alpha = 0.5, draw_quantiles = c(0.5)) +
+    geom_boxplot(width = 0.1) +
     geom_jitter(aes(color = response), alpha = 0.8) +
     scale_fill_manual(values = color_pal) +
     scale_color_manual(values = color_pal) +
