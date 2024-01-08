@@ -74,6 +74,7 @@ treatment_response_rankings <- gene_rankings %>%
 
 # load mm30 individual GEO/MMRF gene expression datasets
 geo_dir <- file.path(data_dir, "geo")
+mmrf_dir <- file.path(data_dir, "mmrf")
 
 # slow; pre-filter genes and/or load indiv datasets on-the-fly?
 #mm30_expr <- readRDS(file.path(data_dir, "expr/mm30_expr.rds"))
@@ -193,6 +194,26 @@ server <- function(input, output, session) {
       df
     })
 
+    mmrf_expr <- reactive({
+      read_feather(file.path(mmrf_dir, "data.feather"))
+    })
+
+    mmrf_mdat <- reactive({
+      df <- read_feather(file.path(mmrf_dir, "column-metadata.feather")) %>%
+        select(public_id, iss_stage, ecog, mm_status, fresp, frespcd,
+               trtshnm, pfscdy, censpfs, oscdy, censos)
+
+      df$frespcd <- ordered(df$frespcd, c("sCR", "CR", "VGPR", "PR"))
+
+      df$response_bor_len_dex <- df$frespcd
+      df$response_bor_cyc_dex <- df$frespcd
+
+      df$response_bor_len_dex[df$trtshnm != "Bor-Len-Dex"] <- NA
+      df$response_bor_cyc_dex[df$trtshnm != "Bor-Cyc-Dex"] <- NA
+
+      df
+    })
+
   #
   # html output
   #
@@ -300,11 +321,39 @@ server <- function(input, output, session) {
     plot_categorical(df, "GSE39754", "Treatment Response (VAD + ACST)", input$gene_trmt, cfg$colors)
   })
 
+  output$mmrf_bor_len_dex_plot <- renderPlotly({
+    gene_expr <- mmrf_expr() %>%
+      filter(symbol == input$gene_trmt) %>%
+      select(-symbol) %>%
+      as.numeric()
+
+    df <- mmrf_mdat() %>%
+      select(public_id, response = response_bor_len_dex)
+
+    df$feature <- gene_expr
+
+    plot_categorical(df, "MMRF", "Treatment Response (Bor-Len-Dex)", input$gene_trmt, cfg$colors)
+  })
+
+  output$mmrf_bor_cyc_dex_plot <- renderPlotly({
+    gene_expr <- mmrf_expr() %>%
+      filter(symbol == input$gene_trmt) %>%
+      select(-symbol) %>%
+      as.numeric()
+
+    df <- mmrf_mdat() %>%
+      select(public_id, response = response_bor_cyc_dex)
+
+    df$feature <- gene_expr
+
+    plot_categorical(df, "MMRF", "Treatment Response (Bor-Cyc-Dex)", input$gene_trmt, cfg$colors)
+  })
+
   output$treatment_response_plots <- renderUI({
     plts <- list()
 
     if (input$gene_trmt %in% gse9782_expr()$symbol) {
-      plts <- c(plts, list(plotlyOutput("gse9782_plot")))
+      plts <- c(plts, list(plotlyOutput("gse9782_plot", height = "740px")))
     }
 
     if (input$gene_trmt %in% gse68871_expr()$symbol) {
@@ -313,6 +362,11 @@ server <- function(input, output, session) {
 
     if (input$gene_trmt %in% gse39754_expr()$symbol) {
       plts <- c(plts, list(plotlyOutput("gse39754_plot")))
+    }
+
+    if (input$gene_trmt %in% mmrf_expr()$symbol) {
+      plts <- c(plts, list(plotlyOutput("mmrf_bor_len_dex_plot")))
+      plts <- c(plts, list(plotlyOutput("mmrf_bor_cyc_dex_plot")))
     }
 
     tagList(plts)
