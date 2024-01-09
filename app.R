@@ -30,6 +30,14 @@ data_dir <- "../data"
 # load config
 cfg <- read_yaml("config/config-v7.0.yml")
 
+# number of datasets used for each subset
+num_datasets <- list(
+  "stage" = 17,
+  "surv_os" = 6,
+  "surv_pfs" = 4,
+  "treatment" = 4
+)
+
 # options for survival plot upper/lower expression cutoffs
 # surv_expr_cutoffs <- cfg$surv_cutoff_opts
 # names(surv_expr_cutoffs) <- paste0(surv_expr_cutoffs, " %")
@@ -59,6 +67,27 @@ stage_rankings <- gene_rankings %>%
            CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
            Missing = num_missing_disease_stage) %>%
     filter(Missing <= cfg$max_missing$disease_stage) %>%
+    rename(!!sprintf("Missing (N/%d)", num_datasets$stage) := Missing) %>%
+    arrange(Pval) %>%
+    mutate(Rank = dense_rank(Pval)) %>%
+    select(Rank, everything())
+
+survival_os_ranking <- gene_rankings %>%
+    select(Gene = symbol, Pval = survival_os, Description = description,
+           CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
+           Missing = num_missing_survival_os) %>%
+    filter(Missing <= cfg$max_missing$surv_os) %>%
+    rename(!!sprintf("Missing (N/%d)", num_datasets$surv_os) := Missing) %>%
+    arrange(Pval) %>%
+    mutate(Rank = dense_rank(Pval)) %>%
+    select(Rank, everything())
+
+survival_pfs_ranking <- gene_rankings %>%
+    select(Gene = symbol, Pval = survival_pfs, Description = description,
+           CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
+           Missing = num_missing_survival_pfs) %>%
+    filter(Missing <= cfg$max_missing$surv_pfs) %>%
+    rename(!!sprintf("Missing (N/%d)", num_datasets$surv_pfs) := Missing) %>%
     arrange(Pval) %>%
     mutate(Rank = dense_rank(Pval)) %>%
     select(Rank, everything())
@@ -68,6 +97,7 @@ treatment_response_rankings <- gene_rankings %>%
            CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
            Missing = num_missing_treatment_response) %>%
     filter(Missing <= cfg$max_missing$treatment_response) %>%
+    rename(!!sprintf("Missing (N/%d)", num_datasets$treatment) := Missing) %>%
     arrange(Pval) %>%
     mutate(Rank = dense_rank(Pval)) %>%
     select(Rank, everything())
@@ -161,58 +191,58 @@ server <- function(input, output, session) {
     }
   }
 
-    #
-    # datasets
-    #
-    gse9782_expr <- reactive({
-      read_feather(file.path(geo_dir, "GSE9782", "data.feather"))
-    })
+  #
+  # datasets
+  #
+  gse9782_expr <- reactive({
+    read_feather(file.path(geo_dir, "GSE9782", "data.feather"))
+  })
 
-    gse9782_mdat <- reactive({
-      df <- read_feather(file.path(geo_dir, "GSE9782", "column-metadata.feather"))
-      df$treatment_response <- ordered(df$treatment_response, c("CR", "PR", "MR", "NC", "PD"))
-      df
-    })
+  gse9782_mdat <- reactive({
+    df <- read_feather(file.path(geo_dir, "GSE9782", "column-metadata.feather"))
+    df$treatment_response <- ordered(df$treatment_response, c("CR", "PR", "MR", "NC", "PD"))
+    df
+  })
 
-    gse68871_expr <- reactive({
-      read_feather(file.path(geo_dir, "GSE68871", "data.feather"))
-    })
+  gse68871_expr <- reactive({
+    read_feather(file.path(geo_dir, "GSE68871", "data.feather"))
+  })
 
-    gse68871_mdat <- reactive({
-      df <- read_feather(file.path(geo_dir, "GSE68871", "column-metadata.feather"))
-      df$treatment_response <- ordered(df$treatment_response, c("CR", "nCR", "VGPR", "PR", "SD"))
-      df
-    })
+  gse68871_mdat <- reactive({
+    df <- read_feather(file.path(geo_dir, "GSE68871", "column-metadata.feather"))
+    df$treatment_response <- ordered(df$treatment_response, c("CR", "nCR", "VGPR", "PR", "SD"))
+    df
+  })
 
-    gse39754_expr <- reactive({
-      read_feather(file.path(geo_dir, "GSE39754", "data.feather"))
-    })
+  gse39754_expr <- reactive({
+    read_feather(file.path(geo_dir, "GSE39754", "data.feather"))
+  })
 
-    gse39754_mdat <- reactive({
-      df <- read_feather(file.path(geo_dir, "GSE39754", "column-metadata.feather"))
-      df$treatment_response <- ordered(df$treatment_response, c("CR", "VGPR", "PR", "NR", "Prog"))
-      df
-    })
+  gse39754_mdat <- reactive({
+    df <- read_feather(file.path(geo_dir, "GSE39754", "column-metadata.feather"))
+    df$treatment_response <- ordered(df$treatment_response, c("CR", "VGPR", "PR", "NR", "Prog"))
+    df
+  })
 
-    mmrf_expr <- reactive({
-      read_feather(file.path(mmrf_dir, "data.feather"))
-    })
+  mmrf_expr <- reactive({
+    read_feather(file.path(mmrf_dir, "data.feather"))
+  })
 
-    mmrf_mdat <- reactive({
-      df <- read_feather(file.path(mmrf_dir, "column-metadata.feather")) %>%
-        select(public_id, iss_stage, ecog, mm_status, fresp, frespcd,
-               trtshnm, pfscdy, censpfs, oscdy, censos)
+  mmrf_mdat <- reactive({
+    df <- read_feather(file.path(mmrf_dir, "column-metadata.feather")) %>%
+      select(public_id, iss_stage, ecog, mm_status, fresp, frespcd,
+              trtshnm, pfscdy, censpfs, oscdy, censos)
 
-      df$frespcd <- ordered(df$frespcd, c("sCR", "CR", "VGPR", "PR"))
+    df$frespcd <- ordered(df$frespcd, c("sCR", "CR", "VGPR", "PR"))
 
-      df$response_bor_len_dex <- df$frespcd
-      df$response_bor_cyc_dex <- df$frespcd
+    df$response_bor_len_dex <- df$frespcd
+    df$response_bor_cyc_dex <- df$frespcd
 
-      df$response_bor_len_dex[df$trtshnm != "Bor-Len-Dex"] <- NA
-      df$response_bor_cyc_dex[df$trtshnm != "Bor-Cyc-Dex"] <- NA
+    df$response_bor_len_dex[df$trtshnm != "Bor-Len-Dex"] <- NA
+    df$response_bor_cyc_dex[df$trtshnm != "Bor-Cyc-Dex"] <- NA
 
-      df
-    })
+    df
+  })
 
   #
   # html output
@@ -223,14 +253,36 @@ server <- function(input, output, session) {
   #
 
   output$disease_stage_tbl <- renderDataTable({
-    #req(gene_df())
     DT::datatable(stage_rankings, style = "bootstrap", escape = FALSE,  rownames = FALSE,
                   selection = "single", options = tableOpts) %>%
       formatSignif(columns = c("Pval"), digits = 3)
   })
 
+  output$survival_tbl <- renderDataTable({
+    if (input$surv_subset == "OS") {
+      dat <- survival_os_ranking
+    } else {
+      dat <- survival_pfs_ranking
+    }
+
+    DT::datatable(dat, style = "bootstrap", escape = FALSE,  rownames = FALSE,
+                  selection = "single", options = tableOpts) %>%
+      formatSignif(columns = c("Pval"), digits = 3)
+  })
+
+  # output$survival_os_tbl <- renderDataTable({
+  #   DT::datatable(survival_os_ranking, style = "bootstrap", escape = FALSE,  rownames = FALSE,
+  #                 selection = "single", options = tableOpts) %>%
+  #     formatSignif(columns = c("Pval"), digits = 3)
+  # })
+
+  # output$survival_pfs_tbl <- renderDataTable({
+  #   DT::datatable(survival_pfs_ranking, style = "bootstrap", escape = FALSE,  rownames = FALSE,
+  #                 selection = "single", options = tableOpts) %>%
+  #     formatSignif(columns = c("Pval"), digits = 3)
+  # })
+
   output$treatment_response_tbl <- renderDataTable({
-    #req(gene_df())
     DT::datatable(treatment_response_rankings,
                   style = "bootstrap", escape = FALSE,  rownames = FALSE,
                   selection = "single", options = tableOpts) %>%
@@ -433,7 +485,19 @@ ui <- function(request) {
       ),
       tabPanel(
         "Survival",
-        ""
+        fluidRow(
+                radioButtons("surv_subset", "OS/PFS?",
+                             selected = "OS",
+                             inline = TRUE,
+                             choiceNames = list("OS", "PFS"),
+                             choiceValues = list("OS", "PFS"))
+        ),
+        fluidRow(
+          column(
+              width = 4,
+              withSpinner(dataTableOutput("survival_tbl"))
+          )
+        )
       ),
       tabPanel(
         "Treatment",
@@ -463,19 +527,23 @@ ui <- function(request) {
         )
       ),
       tabPanel(
-        "Cell Lines",
+        "Cell Lines*",
         ""
       ),
       tabPanel(
-        "Co-Expression",
+        "Co-Expression*",
         ""
       ),
       tabPanel(
-        "NLP",
+        "CRISPR*",
         ""
       ),
       tabPanel(
-        "Datasets",
+        "NLP*",
+        ""
+      ),
+      tabPanel(
+        "Datasets*",
         ""
       )
     )
