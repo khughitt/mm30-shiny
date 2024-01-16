@@ -42,11 +42,13 @@ num_datasets <- list(
 # surv_expr_cutoffs <- cfg$surv_cutoff_opts
 # names(surv_expr_cutoffs) <- paste0(surv_expr_cutoffs, " %")
 
+surv_expr_cutoffs <- c(25, 75)
+
 # load mm30 gene scores
 mm30_genes <- read_feather(file.path(data_dir, "mm30", "mm30_gene_scores.feather"))
 
 # load metadata
-gene_mdata <- read_tsv(file.path(data_dir, "metadata/genes.tsv"), col_types = cols()) %>%
+gene_mdata <- read_tsv(file.path(data_dir, "metadata/genes.tsv"), show_col_types = FALSE) %>%
   select(-chr_subband)
 
 covariates <- read_yaml(file.path(data_dir, "metadata/covariates.yml"))
@@ -72,7 +74,7 @@ stage_rankings <- gene_rankings %>%
     mutate(Rank = dense_rank(Pval)) %>%
     select(Rank, everything())
 
-survival_os_ranking <- gene_rankings %>%
+survival_os_rankings <- gene_rankings %>%
     select(Gene = symbol, Pval = survival_os, Description = description,
            CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
            Missing = num_missing_survival_os) %>%
@@ -82,7 +84,7 @@ survival_os_ranking <- gene_rankings %>%
     mutate(Rank = dense_rank(Pval)) %>%
     select(Rank, everything())
 
-survival_pfs_ranking <- gene_rankings %>%
+survival_pfs_rankings <- gene_rankings %>%
     select(Gene = symbol, Pval = survival_pfs, Description = description,
            CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
            Missing = num_missing_survival_pfs) %>%
@@ -260,27 +262,15 @@ server <- function(input, output, session) {
 
   output$survival_tbl <- renderDataTable({
     if (input$surv_subset == "OS") {
-      dat <- survival_os_ranking
+      dat <- survival_os_rankings
     } else {
-      dat <- survival_pfs_ranking
+      dat <- survival_pfs_rankings
     }
 
     DT::datatable(dat, style = "bootstrap", escape = FALSE,  rownames = FALSE,
                   selection = "single", options = tableOpts) %>%
       formatSignif(columns = c("Pval"), digits = 3)
   })
-
-  # output$survival_os_tbl <- renderDataTable({
-  #   DT::datatable(survival_os_ranking, style = "bootstrap", escape = FALSE,  rownames = FALSE,
-  #                 selection = "single", options = tableOpts) %>%
-  #     formatSignif(columns = c("Pval"), digits = 3)
-  # })
-
-  # output$survival_pfs_tbl <- renderDataTable({
-  #   DT::datatable(survival_pfs_ranking, style = "bootstrap", escape = FALSE,  rownames = FALSE,
-  #                 selection = "single", options = tableOpts) %>%
-  #     formatSignif(columns = c("Pval"), digits = 3)
-  # })
 
   output$treatment_response_tbl <- renderDataTable({
     DT::datatable(treatment_response_rankings,
@@ -373,6 +363,21 @@ server <- function(input, output, session) {
     plot_categorical(df, "GSE39754", "Treatment Response (VAD + ACST)", input$gene_trmt, cfg$colors)
   })
 
+  output$mmrf_os_plot <- renderPlot({
+    gene_expr <- mmrf_expr() %>%
+      filter(symbol == input$gene_trmt) %>%
+      select(-symbol) %>%
+      as.numeric()
+
+    df <- mmrf_mdat() %>%
+      select(public_id, time = oscdy, event = censos)
+
+    df$feature <- gene_expr
+
+    plot_survival(df, "MMRF", "Overall Survival", "Gene Expression", "days",
+                  surv_expr_cutoffs, cfg$colors)
+  })
+
   output$mmrf_bor_len_dex_plot <- renderPlotly({
     gene_expr <- mmrf_expr() %>%
       filter(symbol == input$gene_trmt) %>%
@@ -404,6 +409,11 @@ server <- function(input, output, session) {
   output$treatment_response_plots <- renderUI({
     plts <- list()
 
+    if (input$gene_trmt %in% mmrf_expr()$symbol) {
+      plts <- c(plts, list(plotlyOutput("mmrf_bor_len_dex_plot")))
+      plts <- c(plts, list(plotlyOutput("mmrf_bor_cyc_dex_plot")))
+    }
+
     if (input$gene_trmt %in% gse9782_expr()$symbol) {
       plts <- c(plts, list(plotlyOutput("gse9782_plot", height = "740px")))
     }
@@ -416,13 +426,29 @@ server <- function(input, output, session) {
       plts <- c(plts, list(plotlyOutput("gse39754_plot")))
     }
 
-    if (input$gene_trmt %in% mmrf_expr()$symbol) {
-      plts <- c(plts, list(plotlyOutput("mmrf_bor_len_dex_plot")))
-      plts <- c(plts, list(plotlyOutput("mmrf_bor_cyc_dex_plot")))
-    }
-
     tagList(plts)
   })
+
+  output$surv_os_plots <- renderUI({
+    plts <- list()
+
+    if (input$gene_trmt %in% mmrf_expr()$symbol) {
+      plts <- c(plts, list(plotOutput("mmrf_os_plot", height = "740px")))
+    }
+  })
+
+  # overall survival plots
+  # MMRF
+  # GSE19784
+  # GSE24080
+  # GSE7039
+  # GSE57317
+  # GSE9782
+
+  # prog free survival plots
+  # GSE9782
+  # GSE19784
+  # MMRF
 
   # bookmarking support
   observe({
@@ -496,8 +522,21 @@ ui <- function(request) {
           column(
               width = 4,
               withSpinner(dataTableOutput("survival_tbl"))
+          ),
+          column(
+              width = 4,
+              fluidRow(
+                column(
+                  width = 4,
+                  selectizeInput("gene_surv_os", "Gene:",
+                                 choices = survival_os_rankings$Gene),
+                  helpText("Gene to visualize OS data for.")
+                )
+              ),
+              hr(),
+              withSpinner(htmlOutput("surv_os_plots"))
           )
-        )
+        ),
       ),
       tabPanel(
         "Treatment",
@@ -553,7 +592,7 @@ ui <- function(request) {
 #
 # Creates a kaplan-meyer survival plot for specified upper/lower expression quantiles.
 #
-plot_survival <- function(dat, dataset, covariate, feat_name, expr_cutoffs, color_pal) {
+plot_survival <- function(dat, dataset, covariate, feat_name, time_units, expr_cutoffs, color_pal) {
   # divide expression into quantiles
   cutoff <- as.numeric(expr_cutoffs)
 
@@ -564,15 +603,15 @@ plot_survival <- function(dat, dataset, covariate, feat_name, expr_cutoffs, colo
   dat$Expression[dat$feature >= expr_quantiles[2]] <- paste0("Upper ", names(expr_quantiles)[1])
 
   # determine units to use
-  if (dataset %in% c("MMRF", "GSE7039", "GSE57317", "GSE9782")) {
-    time_units <- "days"
-  } else if (dataset %in% c("GSE24080")) {
-    time_units <- "weeks"
-  } else if (dataset %in% c("GSE19784")) {
-    time_units <- "months"
-  } else {
-    time_units <- "?"
-  }
+  # if (dataset %in% c("MMRF", "GSE7039", "GSE57317", "GSE9782")) {
+  #   time_units <- "days"
+  # } else if (dataset %in% c("GSE24080")) {
+  #   time_units <- "weeks"
+  # } else if (dataset %in% c("GSE19784")) {
+  #   time_units <- "months"
+  # } else {
+  #   time_units <- "?"
+  # }
 
   # drop all data except for upper and lower quantiles
   dat <- dat %>%
