@@ -19,16 +19,15 @@ library(tidyverse)
 library(yaml)
 source("R/plotting.R")
 
-options(spinner.color = "#00bc8c")
-options(scipen = 2, digits = 3)
+options(spinner.color="#00bc8c")
+options(scipen=2, digits=3)
 set.seed(1)
 
 log_threshold(DEBUG)
 log_info("Initializing MM30 shiny app..")
 
-tableOpts <- list(pageLength = 15)
+tableOpts <- list(pageLength=15)
 
-# TESTING (Dec23)
 data_dir <- "../data"
 
 # load config
@@ -36,10 +35,10 @@ cfg <- read_yaml("config/config-v7.0.yml")
 
 # number of datasets used for each subset
 num_datasets <- list(
-  "stage" = 17,
-  "surv_os" = 6,
-  "surv_pfs" = 4,
-  "treatment" = 4
+  "stage"=17,
+  "surv_os"=6,
+  "surv_pfs"=4,
+  "treatment"=4
 )
 
 # ordered vector of disease stages
@@ -55,7 +54,7 @@ log_info("Loading mm30_gene_scores.feather")
 mm30_genes <- read_feather(file.path(data_dir, "mm30", "mm30_gene_scores.feather"))
 
 # load metadata
-gene_mdata <- read_tsv(file.path(data_dir, "metadata/genes.tsv"), show_col_types = FALSE) %>%
+gene_mdata <- read_tsv(file.path(data_dir, "metadata/genes.tsv"), show_col_types=FALSE) %>%
   select(-chr_subband)
 
 covariates <- read_yaml(file.path(data_dir, "metadata/covariates.yml"))
@@ -70,52 +69,52 @@ stage_sample_ids <- readRDS(file.path(data_dir, "metadata/disease_stage_sample_i
 log_info("Creating gene ranking dataframes")
 
 gene_rankings <- mm30_genes %>%
-    left_join(gene_mdata, by = "symbol") %>%
+    left_join(gene_mdata, by="symbol") %>%
     select(-num_datasets)
 
 stage_rankings <- gene_rankings %>%
-    select(Gene = symbol, Pval = disease_stage, Description = description,
-           CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
-           DGIdb = dgidb_categories,
-           Missing = disease_stage_num_missing) %>%
+    select(Gene=symbol, Pval=disease_stage, Description=description,
+           CHR=chr_region, `Cell Cycle`=cell_cycle_phase,
+           DGIdb=dgidb_categories,
+           Missing=disease_stage_num_missing) %>%
     filter(Missing <= cfg$max_missing$disease_stage) %>%
     rename(!!sprintf("Missing (N / %d)", num_datasets$stage) := Missing) %>%
     arrange(Pval) %>%
-    mutate(Rank = dense_rank(Pval)) %>%
+    mutate(Rank=dense_rank(Pval)) %>%
     select(Rank, everything())
 
-# highlight genes located on ch1 (TESTING..)
+# highlight genes located on ch1
 ch1 <- substr(stage_rankings$CHR, 1, 2) %in% c("1p", "1q")
 stage_rankings$chr_color <- ifelse(ch1, "#77BDF3", "")
 
 survival_os_rankings <- gene_rankings %>%
-    select(Gene = symbol, Pval = survival_os, Description = description,
-           CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
-           Missing = survival_os_num_missing) %>%
+    select(Gene=symbol, Pval=survival_os, Description=description,
+           CHR=chr_region, `Cell Cycle`=cell_cycle_phase,
+           Missing=survival_os_num_missing) %>%
     filter(Missing <= cfg$max_missing$surv_os) %>%
     rename(!!sprintf("Missing (N/%d)", num_datasets$surv_os) := Missing) %>%
     arrange(Pval) %>%
-    mutate(Rank = dense_rank(Pval)) %>%
+    mutate(Rank=dense_rank(Pval)) %>%
     select(Rank, everything())
 
 survival_pfs_rankings <- gene_rankings %>%
-    select(Gene = symbol, Pval = survival_pfs, Description = description,
-           CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
-           Missing = survival_pfs_num_missing) %>%
+    select(Gene=symbol, Pval=survival_pfs, Description=description,
+           CHR=chr_region, `Cell Cycle`=cell_cycle_phase,
+           Missing=survival_pfs_num_missing) %>%
     filter(Missing <= cfg$max_missing$surv_pfs) %>%
     rename(!!sprintf("Missing (N/%d)", num_datasets$surv_pfs) := Missing) %>%
     arrange(Pval) %>%
-    mutate(Rank = dense_rank(Pval)) %>%
+    mutate(Rank=dense_rank(Pval)) %>%
     select(Rank, everything())
 
 treatment_response_rankings <- gene_rankings %>%
-    select(Gene = symbol, Pval = treatment_response, Description = description,
-           CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
-           Missing = treatment_response_num_missing) %>%
+    select(Gene=symbol, Pval=treatment_response, Description=description,
+           CHR=chr_region, `Cell Cycle`=cell_cycle_phase,
+           Missing=treatment_response_num_missing) %>%
     filter(Missing <= cfg$max_missing$treatment_response) %>%
     rename(!!sprintf("Missing (N/%d)", num_datasets$treatment) := Missing) %>%
     arrange(Pval) %>%
-    mutate(Rank = dense_rank(Pval)) %>%
+    mutate(Rank=dense_rank(Pval)) %>%
     select(Rank, everything())
 
 # load mm30 individual GEO/MMRF gene expression datasets
@@ -294,19 +293,19 @@ server <- function(input, output, session) {
   #
   ################################################################################
   output$disease_stage_tbl <- renderDataTable({
-    tblOpts <- c(tableOpts, list(columnDefs = list(list(visible=FALSE, targets=c("chr_color")))))
+    tblOpts <- c(tableOpts, list(columnDefs=list(list(visible=FALSE, targets=c("chr_color")))))
 
     DT::datatable(stage_rankings, 
-                  style = "bootstrap", 
-                  escape = FALSE,  
-                  rownames = FALSE,
-                  selection = "single", 
-                  options = tblOpts) %>%
-      formatSignif(columns = c("Pval"), digits = 3) %>%
+                  style="bootstrap", 
+                  escape=FALSE,  
+                  rownames=FALSE,
+                  selection="single", 
+                  options=tblOpts) %>%
+      formatSignif(columns=c("Pval"), digits=3) %>%
       formatStyle(
             "CHR",
-            valueColumns = "chr_color",
-            backgroundColor = JS("value")
+            valueColumns="chr_color",
+            backgroundColor=JS("value")
           )
 
   })
@@ -318,16 +317,16 @@ server <- function(input, output, session) {
       dat <- survival_pfs_rankings
     }
 
-    DT::datatable(dat, style = "bootstrap", escape = FALSE,  rownames = FALSE,
-                  selection = "single", options = tableOpts) %>%
-      formatSignif(columns = c("Pval"), digits = 3)
+    DT::datatable(dat, style="bootstrap", escape=FALSE,  rownames=FALSE,
+                  selection="single", options=tableOpts) %>%
+      formatSignif(columns=c("Pval"), digits=3)
   })
 
   output$treatment_response_tbl <- renderDataTable({
     DT::datatable(treatment_response_rankings,
-                  style = "bootstrap", escape = FALSE,  rownames = FALSE,
-                  selection = "single", options = tableOpts) %>%
-      formatSignif(columns = c("Pval"), digits = 3)
+                  style="bootstrap", escape=FALSE,  rownames=FALSE,
+                  selection="single", options=tableOpts) %>%
+      formatSignif(columns=c("Pval"), digits=3)
   })
 
   ################################################################################
@@ -340,16 +339,16 @@ server <- function(input, output, session) {
     log_info("output$stage_plot")
 
     # create dataframe with disease stage gene expr estimates
-    gene_expr <- combined_expr[input$gene_stg, , drop = FALSE]
+    gene_expr <- combined_expr[input$gene_stg, , drop=FALSE]
 
     stages <- c("Healthy", "MGUS", "SMM", "MM", "RRMM")
 
     stage_expr_lst <- list(
-      "Healthy" = c(),
-      "MGUS" = c(),
-      "SMM" = c(),
-      "MM" = c(),
-      "RRMM" = c()
+      "Healthy"=c(),
+      "MGUS"=c(),
+      "SMM"=c(),
+      "MM"=c(),
+      "RRMM"=c()
       )
 
     for (stage in stages) {
@@ -361,15 +360,15 @@ server <- function(input, output, session) {
 
     # create long df
     stage_df <- stack(stage_expr_lst) %>%
-      select(stage = ind, expr = values)
+      select(stage=ind, expr=values)
 
     # draw violin + jitter plot
-    ggplot(stage_df, aes(x = stage, y = expr)) +
-      geom_violin(aes(fill = stage, color = stage), alpha = 0.5, draw_quantiles = c(0.5)) +
-      geom_jitter(aes(color = stage), alpha = 0.8) +
-      scale_fill_manual(values = cfg$colors) +
-      scale_color_manual(values = cfg$colors) +
-      theme_pubr(base_size = 16)
+    ggplot(stage_df, aes(x=stage, y=expr)) +
+      geom_violin(aes(fill=stage, color=stage), alpha=0.5, draw_quantiles=c(0.5)) +
+      geom_jitter(aes(color=stage), alpha=0.8) +
+      scale_fill_manual(values=cfg$colors) +
+      scale_color_manual(values=cfg$colors) +
+      theme_pubr(base_size=16)
       #ggtitle(sprintf("%s: %s vs. %s", dataset, feat_name, covariate)) +
       #xlab(covariate) +
       #ylab(sprintf("%s expression", feat_name))
@@ -389,7 +388,7 @@ server <- function(input, output, session) {
       as.numeric()
 
     df <- gse9782_mdat() %>%
-      select(geo_accession, response = treatment_response)
+      select(geo_accession, response=treatment_response)
 
     df$feature <- gene_expr
 
@@ -403,7 +402,7 @@ server <- function(input, output, session) {
       as.numeric()
 
     df <- gse68871_mdat() %>%
-      select(geo_accession, response = treatment_response)
+      select(geo_accession, response=treatment_response)
 
     df$feature <- gene_expr
 
@@ -417,7 +416,7 @@ server <- function(input, output, session) {
       as.numeric()
 
     df <- gse39754_mdat() %>%
-      select(geo_accession, response = treatment_response)
+      select(geo_accession, response=treatment_response)
 
     df$feature <- gene_expr
 
@@ -431,7 +430,7 @@ server <- function(input, output, session) {
       as.numeric()
 
     df <- mmrf_mdat() %>%
-      select(public_id, response = response_bor_len_dex)
+      select(public_id, response=response_bor_len_dex)
 
     df$feature <- gene_expr
 
@@ -445,7 +444,7 @@ server <- function(input, output, session) {
       as.numeric()
 
     df <- mmrf_mdat() %>%
-      select(public_id, response = response_bor_cyc_dex)
+      select(public_id, response=response_bor_cyc_dex)
 
     df$feature <- gene_expr
 
@@ -463,7 +462,7 @@ server <- function(input, output, session) {
     }
 
     if (input$gene_trmt %in% gse9782_expr()$symbol) {
-      plts <- c(plts, list(plotlyOutput("gse9782_treatment_plot", height = "740px")))
+      plts <- c(plts, list(plotlyOutput("gse9782_treatment_plot", height="740px")))
     }
 
     if (input$gene_trmt %in% gse68871_expr()$symbol) {
@@ -494,7 +493,7 @@ server <- function(input, output, session) {
       as.numeric()
 
     df <- mmrf_mdat() %>%
-      select(public_id, time = oscdy, event = censos)
+      select(public_id, time=oscdy, event=censos)
 
     df$feature <- gene_expr
 
@@ -509,7 +508,7 @@ server <- function(input, output, session) {
       as.numeric()
 
     df <- gse19784_mdat() %>%
-      select(public_id, time = os_time, event = os_event)
+      select(public_id, time=os_time, event=os_event)
     df$feature <- gene_expr
 
     plot_survival(df, "GSE19784", "Overall Survival", "Gene Expression", "Days",
@@ -523,7 +522,7 @@ server <- function(input, output, session) {
       as.numeric()
 
     df <- gse19784_mdat() %>%
-      select(public_id, time = pfs_time, event = pfs_event)
+      select(public_id, time=pfs_time, event=pfs_event)
     df$feature <- gene_expr
 
     plot_survival(df, "GSE19784", "Progression Free Survival", "Gene Expression", "Days",
@@ -536,7 +535,7 @@ server <- function(input, output, session) {
     plts <- list()
 
     if (input$gene_surv_os %in% mmrf_expr()$symbol) {
-      plts <- c(plts, list(plotOutput("mmrf_os_plot", height = "740px")))
+      plts <- c(plts, list(plotOutput("mmrf_os_plot", height="740px")))
     }
   })
 
@@ -591,24 +590,24 @@ ui <- function(request) {
     ),
 
     navbarPage(
-      id = "tab",
-      theme = shinytheme("flatly"),
-      title = textOutput("page_title"),
-      windowTitle = "MM30",
+      id="tab",
+      theme=shinytheme("flatly"),
+      title=textOutput("page_title"),
+      windowTitle="MM30",
 
       tabPanel(
         "Disease Stage",
         fluidRow(
           column(
-              width = 6,
+              width=6,
               withSpinner(dataTableOutput("disease_stage_tbl"))
           ),
           column(
-              width = 6,
-              selectizeInput("gene_stg", "Gene:", choices = stage_rankings$Gene),
+              width=6,
+              selectizeInput("gene_stg", "Gene:", choices=stage_rankings$Gene),
               helpText("Gene to visualize disease stage data for."),
               hr(),
-              withSpinner(plotOutput("stage_plot", height = "740px"))
+              withSpinner(plotOutput("stage_plot", height="740px"))
           )
         )
       ),
@@ -616,23 +615,23 @@ ui <- function(request) {
         "Survival",
         fluidRow(
                 radioButtons("surv_subset", "OS/PFS?",
-                             selected = "OS",
-                             inline = TRUE,
-                             choiceNames = list("OS", "PFS"),
-                             choiceValues = list("OS", "PFS"))
+                             selected="OS",
+                             inline=TRUE,
+                             choiceNames=list("OS", "PFS"),
+                             choiceValues=list("OS", "PFS"))
         ),
         fluidRow(
           column(
-              width = 6,
+              width=6,
               withSpinner(dataTableOutput("survival_tbl"))
           ),
           column(
-              width = 6,
+              width=6,
               fluidRow(
                 column(
-                  width = 6,
+                  width=6,
                   selectizeInput("gene_surv_os", "Gene:",
-                                 choices = survival_os_rankings$Gene),
+                                 choices=survival_os_rankings$Gene),
                   helpText("Gene to visualize OS data for.")
                 )
               ),
@@ -645,21 +644,21 @@ ui <- function(request) {
         "Treatment",
         fluidRow(
           column(
-              width = 6,
+              width=6,
               withSpinner(dataTableOutput("treatment_response_tbl"))
           ),
           column(
-              width = 6,
+              width=6,
               fluidRow(
                 column(
-                  width = 4,
+                  width=4,
                   selectizeInput("gene_trmt", "Gene:",
-                                 choices = treatment_response_rankings$Gene),
+                                 choices=treatment_response_rankings$Gene),
                   helpText("Gene to visualize treatment response data for.")
                 ),
                 column(
-                 width = 2,
-                 switchInput("show_indiv_treatment_plots", value = TRUE),
+                 width=2,
+                 switchInput("show_indiv_treatment_plots", value=TRUE),
                  helpText("Show individual plots.")
                 )
               ),
@@ -669,8 +668,12 @@ ui <- function(request) {
         )
       ),
       tabPanel(
-        "Cell Lines*",
-        ""
+        "Cell Lines",
+        fluidRow(
+            column(
+              width=6,
+            )
+        )
       ),
       tabPanel(
         "Co-Expression*",
@@ -692,4 +695,4 @@ ui <- function(request) {
   )
 }
 
-shinyApp(ui = ui, server = server, enableBookmarking = "url")
+shinyApp(ui=ui, server=server, enableBookmarking="url")
