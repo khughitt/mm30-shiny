@@ -8,6 +8,7 @@ library(gridExtra)
 library(ggpubr)
 library(heatmaply)
 library(Hmisc)
+library(logger)
 library(plotly)
 library(shinythemes)
 library(shinycssloaders)
@@ -16,12 +17,15 @@ library(survminer)
 library(svglite)
 library(tidyverse)
 library(yaml)
+source("R/plotting.R")
 
 options(spinner.color = "#00bc8c")
 options(scipen = 2, digits = 3)
 set.seed(1)
 
-# table options
+log_threshold(DEBUG)
+log_info("Initializing MM30 shiny app..")
+
 tableOpts <- list(pageLength = 15)
 
 # TESTING (Dec23)
@@ -38,13 +42,16 @@ num_datasets <- list(
   "treatment" = 4
 )
 
+# ordered vector of disease stages
+# disease_stages <- c("Healthy", "MGUS", "SMM", "MM", "RRMM")
+
 # options for survival plot upper/lower expression cutoffs
 # surv_expr_cutoffs <- cfg$surv_cutoff_opts
 # names(surv_expr_cutoffs) <- paste0(surv_expr_cutoffs, " %")
-
 surv_expr_cutoffs <- c(25, 75)
 
 # load mm30 gene scores
+log_info("Loading mm30_gene_scores.feather")
 mm30_genes <- read_feather(file.path(data_dir, "mm30", "mm30_gene_scores.feather"))
 
 # load metadata
@@ -60,6 +67,8 @@ stage_sample_ids <- readRDS(file.path(data_dir, "metadata/disease_stage_sample_i
 
 # pre-load most common tables; also helps by ensuring that genes available for each table are known
 # at the time select elements are rendered
+log_info("Creating gene ranking dataframes")
+
 gene_rankings <- mm30_genes %>%
     left_join(gene_mdata, by = "symbol") %>%
     select(-num_datasets)
@@ -67,17 +76,22 @@ gene_rankings <- mm30_genes %>%
 stage_rankings <- gene_rankings %>%
     select(Gene = symbol, Pval = disease_stage, Description = description,
            CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
-           Missing = num_missing_disease_stage) %>%
+           DGIdb = dgidb_categories,
+           Missing = disease_stage_num_missing) %>%
     filter(Missing <= cfg$max_missing$disease_stage) %>%
-    rename(!!sprintf("Missing (N/%d)", num_datasets$stage) := Missing) %>%
+    rename(!!sprintf("Missing (N / %d)", num_datasets$stage) := Missing) %>%
     arrange(Pval) %>%
     mutate(Rank = dense_rank(Pval)) %>%
     select(Rank, everything())
 
+# highlight genes located on ch1 (TESTING..)
+ch1 <- substr(stage_rankings$CHR, 1, 2) %in% c("1p", "1q")
+stage_rankings$chr_color <- ifelse(ch1, "#77BDF3", "")
+
 survival_os_rankings <- gene_rankings %>%
     select(Gene = symbol, Pval = survival_os, Description = description,
            CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
-           Missing = num_missing_survival_os) %>%
+           Missing = survival_os_num_missing) %>%
     filter(Missing <= cfg$max_missing$surv_os) %>%
     rename(!!sprintf("Missing (N/%d)", num_datasets$surv_os) := Missing) %>%
     arrange(Pval) %>%
@@ -87,7 +101,7 @@ survival_os_rankings <- gene_rankings %>%
 survival_pfs_rankings <- gene_rankings %>%
     select(Gene = symbol, Pval = survival_pfs, Description = description,
            CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
-           Missing = num_missing_survival_pfs) %>%
+           Missing = survival_pfs_num_missing) %>%
     filter(Missing <= cfg$max_missing$surv_pfs) %>%
     rename(!!sprintf("Missing (N/%d)", num_datasets$surv_pfs) := Missing) %>%
     arrange(Pval) %>%
@@ -97,7 +111,7 @@ survival_pfs_rankings <- gene_rankings %>%
 treatment_response_rankings <- gene_rankings %>%
     select(Gene = symbol, Pval = treatment_response, Description = description,
            CHR = chr_region, `Cell Cycle` = cell_cycle_phase,
-           Missing = num_missing_treatment_response) %>%
+           Missing = treatment_response_num_missing) %>%
     filter(Missing <= cfg$max_missing$treatment_response) %>%
     rename(!!sprintf("Missing (N/%d)", num_datasets$treatment) := Missing) %>%
     arrange(Pval) %>%
@@ -113,6 +127,8 @@ mmrf_dir <- file.path(data_dir, "mmrf")
 
 # load combined expr? (still need indiv expr datasets to access genes which are filtered out from
 # the combined dataset, and for non-cpm transformed expr..)
+log_info("loading combined_expr_scaled.feather")
+
 combined_expr <- read_feather(file.path(data_dir, "expr/combined_expr_scaled.feather")) %>%
   column_to_rownames("symbol")
 
@@ -120,13 +136,9 @@ combined_expr <- read_feather(file.path(data_dir, "expr/combined_expr_scaled.fea
 covariate_mdata <- read_feather(file.path(data_dir, "metadata/covariates.feather"))
 
 # individual dataset p-values
+log_info("loading gene_association_pvals.feather")
 mm30_gene_pvals_indiv <- read_feather(file.path(data_dir,
                                                 "fassoc/gene_association_pvals.feather"))
-
-
-message("===========================================")
-message("Initializing..")
-message("===========================================")
 
 #############################
 #
@@ -134,72 +146,103 @@ message("===========================================")
 #
 #############################
 server <- function(input, output, session) {
-  #
-  # Creates a violin plot for a given categorical response variable.
-  #
-  plot_categorical <- function(dat, dataset, covariate, feat_name, color_pal) {
-    # drop any entries with missing values
-    dat <- dat[!is.na(dat$response), ]
+  log_info("shiny::server()")
 
-    # draw violin + jitter plot
-    set.seed(1)
-
-    ncat <- nlevels(dat$response)
-
-    # if more factor levels exist than colors, expand palette
-    if (ncat > length(color_pal)) {
-      color_pal <- colorRampPalette(color_pal)(nlevels(dat$response))
-    }
-
-    plt <- ggplot(dat, aes(x = response, y = feature)) +
-      geom_violin(aes(fill = response, color = response), alpha = 0.5, draw_quantiles = c(0.5)) +
-      geom_boxplot(width = 0.1) +
-      geom_jitter(aes(color = response), alpha = 0.8) +
-      scale_fill_manual(values = color_pal) +
-      scale_color_manual(values = color_pal, guide = "none") +
-      theme_pubr(base_size = 16) +
-      xlab(covariate) +
-      ylab(sprintf("%s expression", feat_name)) +
-      ggtitle(sprintf("%s: %s vs. %s", dataset, feat_name, covariate))
-
-    # work-around to hide part of legend with plotly/ggplotly
-    # https://github.com/plotly/plotly.R/issues/572#issuecomment-876540008
-    plt %>%
-      style(plt, showlegend = FALSE, traces = (ncat + 1):(ncat * 2 + 1))
-  }
-
-  # Creates a scatter plot for differential expression covariates
-  plot_deseq <- function(dat, dataset, covariate, feat_name, color_pal) {
-    # drop any entries with missing values
-    #dat <- dat[!is.na(dat$response), ]
-
-    # if more factor levels exist than colors, expand palette
-    if (nlevels(dat$response) > length(color_pal)) {
-      color_pal <- colorRampPalette(color_pal)(nlevels(dat$response))
-    }
-
-    var1 <- colnames(dat)[2]
-
-    # single variable models
-    if (ncol(dat) == 2) {
-      ggplot(dat) +
-        geom_col(aes(x = .data[[var1]], y = feature, fill = .data[[var1]], color = .data[[var1]])) +
-        scale_fill_manual(values = color_pal) +
-        scale_color_manual(values = color_pal) +
-        ggtitle(sprintf("%s: %s vs. %s", dataset, feat_name, var1)) +
-        theme_pubr(base_size = 16) +
-        xlab(covariate) +
-        ylab(sprintf("%s expression", feat_name))
-    }
-  }
-
+  ################################################################################
   #
   # datasets
   #
-  gse9782_expr <- reactive({
-    read_feather(file.path(geo_dir, "GSE9782", "data.feather"))
+  ################################################################################
+
+  # GEO data
+  gse106218_expr <- reactive({
+    log_info("loading GSE106218/data.feather")
+    read_feather(file.path(geo_dir, "GSE106218", "data.feather"))
+  })
+  gse106218_mdat <- reactive({
+    df <- read_feather(file.path(geo_dir, "GSE106218", "column-metadata.feather"))
+    df$iss_stage <- ordered(df$iss_stage, c("I", "II", "III"))
+    df
   })
 
+  gse117846_expr <- reactive({
+    log_info("loading GSE117846/data.feather")
+    read_feather(file.path(geo_dir, "GSE117846", "data.feather"))
+  })
+  gse117846_mdat <- reactive({
+    df <- read_feather(file.path(geo_dir, "GSE117846", "column-metadata.feather"))
+    df$disease_stage <- ordered(df$disease_stage, c("SMM", "MM"))
+    df
+  })
+
+  gse118900_expr <- reactive({
+    log_info("loading GSE118900/data.feather")
+    read_feather(file.path(geo_dir, "GSE118900", "data.feather"))
+  })
+  gse118900_mdat <- reactive({
+    df <- read_feather(file.path(geo_dir, "GSE118900", "column-metadata.feather"))
+    df$disease_stage <- ordered(df$disease_stage, c("MGUS", "SMM", "MM", "RRMM"))
+    df
+  })
+
+  gse128251_expr <- reactive({
+    log_info("loading GSE128251/data.feather")
+    read_feather(file.path(geo_dir, "GSE128251", "data.feather"))
+  })
+  gse128251_mdat <- reactive({
+    df <- read_feather(file.path(geo_dir, "GSE128251", "column-metadata.feather"))
+    df$treatment <- factor(df$treatment)
+    df$replicate <- factor(df$replicate)
+    df
+  })
+
+  gse134598_expr <- reactive({
+    log_info("loading GSE134598/data.feather")
+    read_feather(file.path(geo_dir, "GSE134598", "data.feather"))
+  })
+  gse134598_mdat <- reactive({
+    df <- read_feather(file.path(geo_dir, "GSE134598", "column-metadata.feather"))
+    df$cell_line <- factor(df$cell_line)
+    df$treatment <- factor(df$treatment)
+    df$dose <- as.numeric(sub("nM", "", df$dose))
+    df
+  })
+
+  gse13591_expr <- reactive({
+    log_info("loading GSE13591/data.feather")
+    read_feather(file.path(geo_dir, "GSE13591", "data.feather"))
+  })
+  gse13591_mdat <- reactive({
+    df <- read_feather(file.path(geo_dir, "GSE13591", "column-metadata.feather"))
+    df$disease_stage <- ordered(df$disease_stage, c("Healthy", "MGUS", "MM"))
+    df
+  })
+
+  gse144249_expr <- reactive({
+    log_info("loading GSE144249/data.feather")
+    read_feather(file.path(geo_dir, "GSE144249", "data.feather"))
+  })
+  gse144249_mdat <- reactive({
+    df <- read_feather(file.path(geo_dir, "GSE144249", "column-metadata.feather"))
+    df$drug_resistance <- factor(df$drug_resistance)
+    df$replicate <- factor(df$replicate)
+    df
+  })
+
+  ########
+
+  gse19784_expr <- reactive({
+    log_info("loading GSE19784/data.feather")
+    read_feather(file.path(geo_dir, "GSE19784", "data.feather"))
+  })
+  gse19784_mdat <- reactive({
+    read_feather(file.path(geo_dir, "GSE19784", "column-metadata.feather"))
+  })
+
+  gse9782_expr <- reactive({
+    log_info("loading GSE9782/data.feather")
+    read_feather(file.path(geo_dir, "GSE9782", "data.feather"))
+  })
   gse9782_mdat <- reactive({
     df <- read_feather(file.path(geo_dir, "GSE9782", "column-metadata.feather"))
     df$treatment_response <- ordered(df$treatment_response, c("CR", "PR", "MR", "NC", "PD"))
@@ -209,7 +252,6 @@ server <- function(input, output, session) {
   gse68871_expr <- reactive({
     read_feather(file.path(geo_dir, "GSE68871", "data.feather"))
   })
-
   gse68871_mdat <- reactive({
     df <- read_feather(file.path(geo_dir, "GSE68871", "column-metadata.feather"))
     df$treatment_response <- ordered(df$treatment_response, c("CR", "nCR", "VGPR", "PR", "SD"))
@@ -219,17 +261,17 @@ server <- function(input, output, session) {
   gse39754_expr <- reactive({
     read_feather(file.path(geo_dir, "GSE39754", "data.feather"))
   })
-
   gse39754_mdat <- reactive({
     df <- read_feather(file.path(geo_dir, "GSE39754", "column-metadata.feather"))
     df$treatment_response <- ordered(df$treatment_response, c("CR", "VGPR", "PR", "NR", "Prog"))
     df
   })
 
+  # MMRF data
   mmrf_expr <- reactive({
+    log_info("loading mmrf/data.feather")
     read_feather(file.path(mmrf_dir, "data.feather"))
   })
-
   mmrf_mdat <- reactive({
     df <- read_feather(file.path(mmrf_dir, "column-metadata.feather")) %>%
       select(public_id, iss_stage, ecog, mm_status, fresp, frespcd,
@@ -246,18 +288,27 @@ server <- function(input, output, session) {
     df
   })
 
-  #
-  # html output
-  #
-
+  ################################################################################
   #
   # tables
   #
-
+  ################################################################################
   output$disease_stage_tbl <- renderDataTable({
-    DT::datatable(stage_rankings, style = "bootstrap", escape = FALSE,  rownames = FALSE,
-                  selection = "single", options = tableOpts) %>%
-      formatSignif(columns = c("Pval"), digits = 3)
+    tblOpts <- c(tableOpts, list(columnDefs = list(list(visible=FALSE, targets=c("chr_color")))))
+
+    DT::datatable(stage_rankings, 
+                  style = "bootstrap", 
+                  escape = FALSE,  
+                  rownames = FALSE,
+                  selection = "single", 
+                  options = tblOpts) %>%
+      formatSignif(columns = c("Pval"), digits = 3) %>%
+      formatStyle(
+            "CHR",
+            valueColumns = "chr_color",
+            backgroundColor = JS("value")
+          )
+
   })
 
   output$survival_tbl <- renderDataTable({
@@ -279,11 +330,14 @@ server <- function(input, output, session) {
       formatSignif(columns = c("Pval"), digits = 3)
   })
 
+  ################################################################################
   #
-  # plots
+  # disease stage plots
   #
+  ################################################################################
   output$stage_plot <- renderPlot({
     set.seed(1)
+    log_info("output$stage_plot")
 
     # create dataframe with disease stage gene expr estimates
     gene_expr <- combined_expr[input$gene_stg, , drop = FALSE]
@@ -321,7 +375,14 @@ server <- function(input, output, session) {
       #ylab(sprintf("%s expression", feat_name))
   })
 
-  output$gse9782_plot <- renderPlotly({
+  ################################################################################
+  #
+  # treatment response plots
+  #
+  ################################################################################
+  output$gse9782_treatment_plot <- renderPlotly({
+    log_info("output$gse9782_treatment_plot")
+
     gene_expr <- gse9782_expr() %>%
       filter(symbol == input$gene_trmt) %>%
       select(-symbol) %>%
@@ -335,7 +396,7 @@ server <- function(input, output, session) {
     plot_categorical(df, "GSE9782", "Treatment Response (VTD)", input$gene_trmt, cfg$colors)
   })
 
-  output$gse68871_plot <- renderPlotly({
+  output$gse68871_treatment_plot <- renderPlotly({
     gene_expr <- gse68871_expr() %>%
       filter(symbol == input$gene_trmt) %>%
       select(-symbol) %>%
@@ -349,7 +410,7 @@ server <- function(input, output, session) {
     plot_categorical(df, "GSE68871", "Treatment Response (VTD)", input$gene_trmt, cfg$colors)
   })
 
-  output$gse39754_plot <- renderPlotly({
+  output$gse39754_treatment_plot <- renderPlotly({
     gene_expr <- gse39754_expr() %>%
       filter(symbol == input$gene_trmt) %>%
       select(-symbol) %>%
@@ -361,21 +422,6 @@ server <- function(input, output, session) {
     df$feature <- gene_expr
 
     plot_categorical(df, "GSE39754", "Treatment Response (VAD + ACST)", input$gene_trmt, cfg$colors)
-  })
-
-  output$mmrf_os_plot <- renderPlot({
-    gene_expr <- mmrf_expr() %>%
-      filter(symbol == input$gene_trmt) %>%
-      select(-symbol) %>%
-      as.numeric()
-
-    df <- mmrf_mdat() %>%
-      select(public_id, time = oscdy, event = censos)
-
-    df$feature <- gene_expr
-
-    plot_survival(df, "MMRF", "Overall Survival", "Gene Expression", "days",
-                  surv_expr_cutoffs, cfg$colors)
   })
 
   output$mmrf_bor_len_dex_plot <- renderPlotly({
@@ -407,6 +453,8 @@ server <- function(input, output, session) {
   })
 
   output$treatment_response_plots <- renderUI({
+    log_info("output$treatment_response_plots")
+
     plts <- list()
 
     if (input$gene_trmt %in% mmrf_expr()$symbol) {
@@ -415,24 +463,79 @@ server <- function(input, output, session) {
     }
 
     if (input$gene_trmt %in% gse9782_expr()$symbol) {
-      plts <- c(plts, list(plotlyOutput("gse9782_plot", height = "740px")))
+      plts <- c(plts, list(plotlyOutput("gse9782_treatment_plot", height = "740px")))
     }
 
     if (input$gene_trmt %in% gse68871_expr()$symbol) {
-      plts <- c(plts, list(plotlyOutput("gse68871_plot")))
+      plts <- c(plts, list(plotlyOutput("gse68871_treatment_plot")))
     }
 
     if (input$gene_trmt %in% gse39754_expr()$symbol) {
-      plts <- c(plts, list(plotlyOutput("gse39754_plot")))
+      plts <- c(plts, list(plotlyOutput("gse39754_treatment_plot")))
     }
 
     tagList(plts)
   })
 
+  ################################################################################
+  #
+  # survival plots
+  #
+  ################################################################################
+  output$mmrf_os_plot <- renderPlot({
+    # could also make a reactive "gene_expr_single_gene()" to allow reactivity to trigger?
+    #req(input$gene_surv_os)
+
+    log_info(sprintf("mmrf_os_plot(%s)", input$gene_surv_os))
+
+    gene_expr <- mmrf_expr() %>%
+      filter(symbol == input$gene_surv_os) %>%
+      select(-symbol) %>%
+      as.numeric()
+
+    df <- mmrf_mdat() %>%
+      select(public_id, time = oscdy, event = censos)
+
+    df$feature <- gene_expr
+
+    plot_survival(df, "MMRF", "Overall Survival", "Gene Expression", "days",
+                  surv_expr_cutoffs, cfg$colors)
+  })
+
+  output$gse19784_os_plot <- renderPlot({
+    gene_expr <- gse19784_expr() %>%
+      filter(symbol == input$gene_surv_os) %>%
+      select(-symbol) %>%
+      as.numeric()
+
+    df <- gse19784_mdat() %>%
+      select(public_id, time = os_time, event = os_event)
+    df$feature <- gene_expr
+
+    plot_survival(df, "GSE19784", "Overall Survival", "Gene Expression", "Days",
+                  surv_expr_cutoffs, cfg$colors)
+  })
+
+  output$gse19784_pfs_plot <- renderPlot({
+    gene_expr <- gse19784_expr() %>%
+      filter(symbol == input$gene_surv_pfs) %>%
+      select(-symbol) %>%
+      as.numeric()
+
+    df <- gse19784_mdat() %>%
+      select(public_id, time = pfs_time, event = pfs_event)
+    df$feature <- gene_expr
+
+    plot_survival(df, "GSE19784", "Progression Free Survival", "Gene Expression", "Days",
+                  surv_expr_cutoffs, cfg$colors)
+  })
+
   output$surv_os_plots <- renderUI({
+    log_info("output$surv_os_plots")
+
     plts <- list()
 
-    if (input$gene_trmt %in% mmrf_expr()$symbol) {
+    if (input$gene_surv_os %in% mmrf_expr()$symbol) {
       plts <- c(plts, list(plotOutput("mmrf_os_plot", height = "740px")))
     }
   })
@@ -497,11 +600,11 @@ ui <- function(request) {
         "Disease Stage",
         fluidRow(
           column(
-              width = 4,
+              width = 6,
               withSpinner(dataTableOutput("disease_stage_tbl"))
           ),
           column(
-              width = 4,
+              width = 6,
               selectizeInput("gene_stg", "Gene:", choices = stage_rankings$Gene),
               helpText("Gene to visualize disease stage data for."),
               hr(),
@@ -520,14 +623,14 @@ ui <- function(request) {
         ),
         fluidRow(
           column(
-              width = 4,
+              width = 6,
               withSpinner(dataTableOutput("survival_tbl"))
           ),
           column(
-              width = 4,
+              width = 6,
               fluidRow(
                 column(
-                  width = 4,
+                  width = 6,
                   selectizeInput("gene_surv_os", "Gene:",
                                  choices = survival_os_rankings$Gene),
                   helpText("Gene to visualize OS data for.")
@@ -542,11 +645,11 @@ ui <- function(request) {
         "Treatment",
         fluidRow(
           column(
-              width = 4,
+              width = 6,
               withSpinner(dataTableOutput("treatment_response_tbl"))
           ),
           column(
-              width = 4,
+              width = 6,
               fluidRow(
                 column(
                   width = 4,
@@ -587,51 +690,6 @@ ui <- function(request) {
       )
     )
   )
-}
-
-#
-# Creates a kaplan-meyer survival plot for specified upper/lower expression quantiles.
-#
-plot_survival <- function(dat, dataset, covariate, feat_name, time_units, expr_cutoffs, color_pal) {
-  # divide expression into quantiles
-  cutoff <- as.numeric(expr_cutoffs)
-
-  expr_quantiles <- quantile(dat$feature, c(cutoff / 100, 1 - (cutoff / 100)))
-
-  dat$Expression <- ""
-  dat$Expression[dat$feature <= expr_quantiles[1]] <- paste0("Lower ", names(expr_quantiles)[1])
-  dat$Expression[dat$feature >= expr_quantiles[2]] <- paste0("Upper ", names(expr_quantiles)[1])
-
-  # determine units to use
-  # if (dataset %in% c("MMRF", "GSE7039", "GSE57317", "GSE9782")) {
-  #   time_units <- "days"
-  # } else if (dataset %in% c("GSE24080")) {
-  #   time_units <- "weeks"
-  # } else if (dataset %in% c("GSE19784")) {
-  #   time_units <- "months"
-  # } else {
-  #   time_units <- "?"
-  # }
-
-  # drop all data except for upper and lower quantiles
-  dat <- dat %>%
-    filter(Expression != "")
-
-  num_samples <- nrow(dat)
-
-  dat$Expression <- factor(dat$Expression)
-
-  cov_label <- str_to_title(gsub("_", " ", covariate))
-  plt_title <- sprintf("%s: %s vs. %s (n = %d)", dataset, cov_label, feat_name, num_samples)
-
-  # perform fit on binarized data
-  fit <- survival::survfit(survival::Surv(time, event) ~ Expression, data = dat)
-
-  # display a kaplan meier plot for result
-  survminer::ggsurvplot(fit, data = dat, ggtheme = theme_pubr(base_size = 16), palette = color_pal,
-                        title = plt_title, xlab = sprintf("Time (%s)", time_units),
-                        legend = "bottom", legend.title = "Legend")
-
 }
 
 shinyApp(ui = ui, server = server, enableBookmarking = "url")
