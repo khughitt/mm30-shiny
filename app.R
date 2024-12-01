@@ -64,6 +64,9 @@ col_mdata <- readRDS(file.path(data_dir, "metadata/column-metadata.rds"))
 # load disease stage -> sample id mapping
 stage_sample_ids <- readRDS(file.path(data_dir, "metadata/disease_stage_sample_ids.rds"))
 
+# load HMCL CPM count data
+hmcl_expr <- read_feather(file.path(data_dir, "hmcl", "rnaseq_symbols.feather"))
+
 # pre-load most common tables; also helps by ensuring that genes available for each table are known
 # at the time select elements are rendered
 log_info("Creating gene ranking dataframes")
@@ -292,14 +295,28 @@ server <- function(input, output, session) {
   # tables
   #
   ################################################################################
+  output$hmcl_expr_tbl <- renderDataTable({
+    dat <- hmcl_expr  %>%
+      filter(symbol == input$gene_hmcl) %>%
+      select(-symbol) %>%
+      t() %>%
+      as.data.frame() %>%
+      rownames_to_column("cell_line") %>%
+      rename(expr=V1) %>%
+      arrange(-expr)
+
+    DT::datatable(dat, style="bootstrap", options=tableOpts) %>%
+      formatSignif(columns=c("expr"), digits=3)
+  })
+
   output$disease_stage_tbl <- renderDataTable({
     tblOpts <- c(tableOpts, list(columnDefs=list(list(visible=FALSE, targets=c("chr_color")))))
 
-    DT::datatable(stage_rankings, 
-                  style="bootstrap", 
-                  escape=FALSE,  
+    DT::datatable(stage_rankings,
+                  style="bootstrap",
+                  escape=FALSE,
                   rownames=FALSE,
-                  selection="single", 
+                  selection="single",
                   options=tblOpts) %>%
       formatSignif(columns=c("Pval"), digits=3) %>%
       formatStyle(
@@ -671,8 +688,15 @@ ui <- function(request) {
         "Cell Lines",
         fluidRow(
             column(
+              width=4,
+              selectizeInput("gene_hmcl", "Gene:",
+                              choices=hmcl_expr$symbol),
+              helpText("Gene to show cell line gene expression data for.")
+            ),
+            column(
               width=6,
-            )
+              withSpinner(dataTableOutput("hmcl_expr_tbl"))
+            ),
         )
       ),
       tabPanel(
