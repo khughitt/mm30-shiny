@@ -28,13 +28,13 @@ log_info("Initializing MM30 shiny app..")
 
 tableOpts <- list(pageLength=15)
 
-data_dir <- "../data"
-
 # load config
-cfg <- read_yaml("config/config-v7.0.yml")
+cfg <- read_yaml("config/config-v7.2.yml")
+
+data_dir <- "../data/7.2"
 
 # number of datasets used for each subset
-num_datasets <- list(
+subset_sizes <- list(
   "stage"=17,
   "surv_os"=6,
   "surv_pfs"=4,
@@ -51,7 +51,8 @@ surv_expr_cutoffs <- c(25, 75)
 
 # load mm30 gene scores
 log_info("Loading mm30_gene_scores.feather")
-mm30_genes <- read_feather(file.path(data_dir, "mm30", "mm30_gene_scores.feather"))
+#mm30_genes <- read_feather(file.path(data_dir, "scores/genes.feather"))
+mm30_genes <- read_feather(file.path(data_dir, "scores/genes-v1.feather"))
 
 # load metadata
 gene_mdata <- read_tsv(file.path(data_dir, "metadata/genes.tsv"), show_col_types=FALSE) %>%
@@ -65,7 +66,7 @@ col_mdata <- readRDS(file.path(data_dir, "metadata/column-metadata.rds"))
 stage_sample_ids <- readRDS(file.path(data_dir, "metadata/disease_stage_sample_ids.rds"))
 
 # load HMCL CPM count data
-hmcl_expr <- read_feather(file.path(data_dir, "hmcl", "rnaseq_symbols.feather"))
+# hmcl_expr <- read_feather(file.path(data_dir, "hmcl", "rnaseq_symbols.feather"))
 
 # pre-load most common tables; also helps by ensuring that genes available for each table are known
 # at the time select elements are rendered
@@ -81,7 +82,7 @@ stage_rankings <- gene_rankings %>%
            DGIdb=dgidb_categories,
            Missing=disease_stage_num_missing) %>%
     filter(Missing <= cfg$max_missing$disease_stage) %>%
-    rename(!!sprintf("Missing (N / %d)", num_datasets$stage) := Missing) %>%
+    rename(!!sprintf("Missing (N / %d)", subset_sizes$stage) := Missing) %>%
     arrange(Pval) %>%
     mutate(Rank=dense_rank(Pval)) %>%
     select(Rank, everything())
@@ -95,7 +96,7 @@ survival_os_rankings <- gene_rankings %>%
            CHR=chr_region, `Cell Cycle`=cell_cycle_phase,
            Missing=survival_os_num_missing) %>%
     filter(Missing <= cfg$max_missing$surv_os) %>%
-    rename(!!sprintf("Missing (N/%d)", num_datasets$surv_os) := Missing) %>%
+    rename(!!sprintf("Missing (N/%d)", subset_sizes$surv_os) := Missing) %>%
     arrange(Pval) %>%
     mutate(Rank=dense_rank(Pval)) %>%
     select(Rank, everything())
@@ -105,7 +106,7 @@ survival_pfs_rankings <- gene_rankings %>%
            CHR=chr_region, `Cell Cycle`=cell_cycle_phase,
            Missing=survival_pfs_num_missing) %>%
     filter(Missing <= cfg$max_missing$surv_pfs) %>%
-    rename(!!sprintf("Missing (N/%d)", num_datasets$surv_pfs) := Missing) %>%
+    rename(!!sprintf("Missing (N/%d)", subset_sizes$surv_pfs) := Missing) %>%
     arrange(Pval) %>%
     mutate(Rank=dense_rank(Pval)) %>%
     select(Rank, everything())
@@ -115,7 +116,7 @@ treatment_response_rankings <- gene_rankings %>%
            CHR=chr_region, `Cell Cycle`=cell_cycle_phase,
            Missing=treatment_response_num_missing) %>%
     filter(Missing <= cfg$max_missing$treatment_response) %>%
-    rename(!!sprintf("Missing (N/%d)", num_datasets$treatment) := Missing) %>%
+    rename(!!sprintf("Missing (N/%d)", subset_sizes$treatment) := Missing) %>%
     arrange(Pval) %>%
     mutate(Rank=dense_rank(Pval)) %>%
     select(Rank, everything())
