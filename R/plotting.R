@@ -37,7 +37,7 @@ plot_survival <- function(dat, dataset, covariate, feat_name, time_units, expr_c
   dat$Expression <- factor(dat$Expression)
 
   cov_label <- str_to_title(gsub("_", " ", covariate))
-  plt_title <- sprintf("%s: %s vs. %s (n=%d)", dataset, cov_label, feat_name, num_samples)
+  plt_title <- sprintf("%s: %s vs. %s Expression (n=%d)", dataset, cov_label, feat_name, num_samples)
 
   # perform fit on binarized data
   fit <- survival::survfit(survival::Surv(time, event) ~ Expression, data=dat)

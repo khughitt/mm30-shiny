@@ -2,8 +2,8 @@
 # MM30 v7.2 configuration
 #
 
-# dataset config dir
-#dataset_cfg_dir: '/data/configs'
+# mm30 pipeline data location
+data_dir: "/data/proj/mm30/7.2"
 
 # plot colors
 colors: ["#00AFBB", "#E7B800", "#FC4E07", "#BB3099", "#EE0099", "#0000AC"]
