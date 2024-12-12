@@ -37,7 +37,7 @@ tableOpts <- list(pageLength=15, scrollX=TRUE)
 selectOpts <- list(target="row", mode="single", selected=1)
 
 # load config
-cfg <- read_yaml("config/config-v7.2.yml")
+cfg <- read_yaml("config/config-v7.3.yml")
 
 results_dir <- file.path(cfg$data_dir, "results")
 fassoc_dir <- file.path(cfg$data_dir, "fassoc")
@@ -80,12 +80,14 @@ gene_scores_surv_os <- read_feather(file.path(results_dir, "scores/combined/surv
 surv_os_num_datasets <- max(gene_scores_surv_os$num_present)
 
 gene_scores_surv_os <- gene_scores_surv_os %>%
-    select(Gene=symbol, `Metap P-value`=sumz_wt_pval, `Metafor P-value`=metafor_pval, Description=description,
+    select(Gene=symbol, sumz_wt_pval, `P-value\n(metafor)`=metafor_pval, Description=description,
            CHR=chr_region, `Cell Cycle`=cell_cycle_phase, Missing=num_missing) %>%
     filter(Missing <= cfg$max_missing$surv_os) %>%
-    rename(!!sprintf("Missing (N/%d)", surv_os_num_datasets) := Missing) %>%
-    arrange(`Metap P-value`) %>%
-    mutate(Rank=dense_rank(`Metap P-value`)) %>%
+    #rename(!!sprintf("Missing (N/%d)", surv_os_num_datasets) := Missing) %>%
+    select(-Missing) %>%
+    arrange(sumz_wt_pval) %>%
+    mutate(Rank=dense_rank(sumz_wt_pval)) %>%
+    rename(`P-value\n(metap)`=sumz_wt_pval) %>%
     select(Rank, everything())
 
 surv_os_pvals <- read_feather(file.path(results_dir, "associations/survival_os/gene/pvals.feather"))
@@ -99,12 +101,14 @@ gene_scores_surv_pfs <- read_feather(file.path(results_dir, "scores/combined/sur
 surv_pfs_num_datasets <- max(gene_scores_surv_pfs$num_present)
 
 gene_scores_surv_pfs <- gene_scores_surv_pfs %>%
-    select(Gene=symbol, `Metap P-value`=sumz_wt_pval, `Metafor P-value`=metafor_pval, Description=description,
+    select(Gene=symbol, sumz_wt_pval, `P-value\n(metafor)`=metafor_pval, Description=description,
            CHR=chr_region, `Cell Cycle`=cell_cycle_phase, Missing=num_missing) %>%
     filter(Missing <= cfg$max_missing$surv_pfs) %>%
-    rename(!!sprintf("Missing (N/%d)", surv_pfs_num_datasets) := Missing) %>%
-    arrange(`Metap P-value`) %>%
-    mutate(Rank=dense_rank(`Metap P-value`)) %>%
+    #rename(!!sprintf("Missing (N/%d)", surv_pfs_num_datasets) := Missing) %>%
+    select(-Missing) %>%
+    arrange(sumz_wt_pval) %>%
+    mutate(Rank=dense_rank(sumz_wt_pval)) %>%
+    rename(`P-value\n(metap)`=sumz_wt_pval) %>%
     select(Rank, everything())
 
 # load combined expr
@@ -135,7 +139,8 @@ server <- function(input, output, session) {
   ###########
   surv_os_datasets <- covariate_mdata %>% 
     filter(phenotype=='overall_survival') %>% 
-    pull(dataset)
+    pull(dataset) %>%
+    sort(TRUE)
 
   surv_os_gene_selected <- reactive({
     gene_scores_surv_os$Gene[input$surv_os_tbl_rows_selected]
@@ -191,13 +196,13 @@ server <- function(input, output, session) {
       tagList(
         tags$h2(gene),
         br(),
-        tags$b("Rank:"),
+        tags$h4("MM30 Rankings:"),
         br(),
         HTML(sprintf("All: <b>%d</b>",  all_rank)), 
         br(),
-        HTML(sprintf("Survival (OS): <b>%d</b>", surv_os_rank)), 
+        HTML(sprintf("Overall Survival (OS): <b>%d</b>", surv_os_rank)), 
         br(),
-        HTML(sprintf("Survival (PFS): <b>%d</b>", surv_pfs_rank))
+        HTML(sprintf("Progression-free Survival (PFS): <b>%d</b>", surv_pfs_rank))
       )
   })
 
@@ -207,12 +212,12 @@ server <- function(input, output, session) {
 
   output$surv_os_gene_tcga_tbl <- renderTable({
     surv_os_gene_tcga_tbl()
-  })
+  }, digits=4)
 
   output$surv_os_tbl <- renderDT({
     DT::datatable(gene_scores_surv_os, style="bootstrap", escape=FALSE,  rownames=FALSE,
                   selection=selectOpts, options=tableOpts) %>%
-      formatSignif(columns=c("Metap P-value", "Metafor P-value"), digits=3)
+      formatSignif(columns=c("P-value\n(metap)", "P-value\n(metafor)"), digits=3)
   })
 
   output$surv_os_plot <- renderPlot({
@@ -222,6 +227,7 @@ server <- function(input, output, session) {
 
     # lapply(surv_os_datasets, function(acc) {
     for (acc in surv_os_datasets) {
+
       df <- indiv_mdata[[acc]] %>%
         select(1, time=os_time, event=os_censor)
 
@@ -233,13 +239,21 @@ server <- function(input, output, session) {
 
       df$feature <- gene_expr 
 
-      if (sum(!is.na(gene_expr)) > 0) {
-        plts[[acc]] <- plot_survival(df, acc, "Overall Survival", gene_name, "Days", 
-                                      surv_expr_cutoffs, cfg$colors)
+      time_units <- "Days"
+
+      if (acc %in% c("GSE106218", "GSE19784", "GSE24080")) {
+        time_units <- "Months"
       }
+
+      if (sum(!is.na(gene_expr)) > 0) {
+        plts[[acc]] <- plot_survival(df, acc, time_units, surv_expr_cutoffs, cfg$colors)
+      }
+
     # })
     }
-    arrange_ggsurvplots(plts, nrow=round(length(plts) / 3), ncol=3)
+
+    arrange_ggsurvplots(plts, nrow=ceiling(length(plts) / 3), ncol=3,
+                        title=sprintf("Overall survival (%s)", gene_name))
   })
 
   ##########
@@ -322,8 +336,8 @@ ui <- function(request) {
         "OS",
         fluidRow(
           column(
-              width=6,
-              withSpinner(DTOutput("surv_os_tbl"))
+            width=6,
+            withSpinner(DTOutput("surv_os_tbl"))
           ),
           column(
             width=6,
@@ -331,20 +345,19 @@ ui <- function(request) {
               column(
                 width=3, 
                 uiOutput("surv_os_gene_summary_html"),
-                tagList(
-                  br(),
-                  tags$hr(),
-                  br(),
-                  tags$b("TCGA survival associations"),
-                ),
-                tableOutput("surv_os_gene_tcga_tbl")
-              ),
-              column(
-                width=3,
-                tableOutput("surv_os_details_tbl")
-              ),
+              )
             ),
-            withSpinner(plotOutput("surv_os_plot", height="800px"))
+            withSpinner(plotOutput("surv_os_plot", height="800px")),
+            tagList(
+              tags$hr(),
+              tags$h3("Survival regression results:")
+            ),
+            tableOutput("surv_os_details_tbl"),
+            tagList(
+              tags$hr(),
+              tags$h3("TCGA survival associations:")
+            ),
+            tableOutput("surv_os_gene_tcga_tbl")
           ),
         ),
       ),

@@ -7,7 +7,7 @@
 #
 # Creates a kaplan-meyer survival plot for specified upper/lower expression quantiles.
 #
-plot_survival <- function(dat, dataset, covariate, feat_name, time_units, expr_cutoffs, color_pal) {
+plot_survival <- function(dat, dataset, time_units, expr_cutoffs, color_pal) {
   # divide expression into quantiles
   cutoff <- as.numeric(expr_cutoffs)
 
@@ -17,17 +17,6 @@ plot_survival <- function(dat, dataset, covariate, feat_name, time_units, expr_c
   dat$Expression[dat$feature <= expr_quantiles[1]] <- paste0("Lower ", names(expr_quantiles)[1])
   dat$Expression[dat$feature >= expr_quantiles[2]] <- paste0("Upper ", names(expr_quantiles)[1])
 
-  # determine units to use
-  # if (dataset %in% c("MMRF", "GSE7039", "GSE57317", "GSE9782")) {
-  #   time_units <- "days"
-  # } else if (dataset %in% c("GSE24080")) {
-  #   time_units <- "weeks"
-  # } else if (dataset %in% c("GSE19784")) {
-  #   time_units <- "months"
-  # } else {
-  #   time_units <- "?"
-  # }
-
   # drop all data except for upper and lower quantiles
   dat <- dat %>%
     filter(Expression != "")
@@ -36,8 +25,7 @@ plot_survival <- function(dat, dataset, covariate, feat_name, time_units, expr_c
 
   dat$Expression <- factor(dat$Expression)
 
-  cov_label <- str_to_title(gsub("_", " ", covariate))
-  plt_title <- sprintf("%s: %s vs. %s Expression (n=%d)", dataset, cov_label, feat_name, num_samples)
+  plt_title <- sprintf("%s (n=%d)", dataset, num_samples)
 
   # perform fit on binarized data
   fit <- survival::survfit(survival::Surv(time, event) ~ Expression, data=dat)
