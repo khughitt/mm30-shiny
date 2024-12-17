@@ -107,12 +107,11 @@ gene_scores_all$Rank <- 1:nrow(gene_scores_all)
 surv_os_gene_scores <- read_feather(file.path(results_dir, "scores/combined/survival_os/gene.feather")) %>%
     left_join(gene_mdata, by='symbol') %>%
     filter(num_missing <= cfg$max_missing$surv_os) %>%
-    select(Gene=symbol, sumz_wt_pval, `P-value\n(metafor)`=metafor_pval, Description=description,
-           CHR=chr_region, `Cell Cycle`=cell_cycle_phase, `DGIdb\ncategories`=dgidb_categories) %>%
+    select(symbol, sumz_wt_pval, metafor_pval, description,
+           chr_region, cell_cycle_phase, dgidb_categories) %>%
     arrange(sumz_wt_pval) %>%
-    mutate(Rank=dense_rank(sumz_wt_pval)) %>%
-    rename(`P-value\n(metap)`=sumz_wt_pval) %>%
-    select(Rank, everything())
+    mutate(rank=dense_rank(sumz_wt_pval)) %>%
+    select(rank, everything())
 
 surv_os_gene_pvals   <- read_feather(file.path(results_dir, "associations/survival_os/gene/pvals.feather"))
 surv_os_gene_errors  <- read_feather(file.path(results_dir, "associations/survival_os/gene/errors.feather"))
@@ -123,9 +122,9 @@ surv_os_pathway_scores <- read_feather(file.path(results_dir, "scores/combined/s
     filter(num_missing <= cfg$max_missing$surv_os) %>%
     select(Pathway=gene_set, sumz_wt_pval, `P-value\n(metafor)`=metafor_pval, Collection=collection) %>%
     arrange(sumz_wt_pval) %>%
-    mutate(Rank=dense_rank(sumz_wt_pval)) %>%
+    mutate(rank=dense_rank(sumz_wt_pval)) %>%
     rename(`P-value\n(metap)`=sumz_wt_pval) %>%
-    select(Rank, everything())
+    select(rank, everything())
 
 surv_os_pathway_pvals   <- read_feather(file.path(results_dir, "associations/survival_os/pathway/pvals.feather"))
 surv_os_pathway_errors  <- read_feather(file.path(results_dir, "associations/survival_os/pathway/errors.feather"))
@@ -140,9 +139,9 @@ gene_scores_surv_pfs <- read_feather(file.path(results_dir, "scores/combined/sur
     select(Gene=symbol, sumz_wt_pval, `P-value\n(metafor)`=metafor_pval, Description=description,
            CHR=chr_region, `Cell Cycle`=cell_cycle_phase, `DGIdb\ncategories`=dgidb_categories) %>%
     arrange(sumz_wt_pval) %>%
-    mutate(Rank=dense_rank(sumz_wt_pval)) %>%
+    mutate(rank=dense_rank(sumz_wt_pval)) %>%
     rename(`P-value\n(metap)`=sumz_wt_pval) %>%
-    select(Rank, everything())
+    select(rank, everything())
 
 
 #--------------------------------

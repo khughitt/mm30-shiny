@@ -30,7 +30,7 @@ ui <- function(request) {
           fluidRow(
             column(
               width=6,
-              withSpinner(DTOutput("surv_os_gene_tbl"))
+              withSpinner(DTOutput("surv_os_gene_scores_tbl"))
             ),
             column(
               width=6,
@@ -78,6 +78,11 @@ ui <- function(request) {
                 tags$h3("Survival regression results:")
               ),
               tableOutput("surv_os_pathway_details_tbl"),
+              tagList(
+                tags$hr(),
+                tags$h3("Genes:"),
+              ),
+              tableOutput("surv_os_pathway_gene_tbl"),
             ),
           ),
         ),
@@ -107,7 +112,6 @@ ui <- function(request) {
       tabPanel(
         "Settings",
         fluidRow(
-          
         )
       )
     )

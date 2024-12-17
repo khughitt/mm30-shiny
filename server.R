@@ -81,15 +81,15 @@ server <- function(input, output, session) {
 
       all_rank <- gene_scores_all %>% 
         filter(symbol == gene) %>%
-        pull(Rank)
+        pull(rank)
 
       surv_os_rank <- surv_os_gene_scores %>% 
         filter(Gene == gene) %>%
-        pull(Rank)
+        pull(rank)
 
       surv_pfs_rank <- gene_scores_surv_pfs %>% 
         filter(Gene == gene) %>%
-        pull(Rank)
+        pull(rank)
 
       tagList(
         tags$h2(gene),
@@ -116,12 +116,35 @@ server <- function(input, output, session) {
     surv_os_pathway_details()
   }, digits=-3)
 
+  output$surv_os_pathway_gene_tbl <- renderTable({
+    req(input$surv_os_pathway_tbl_rows_selected)
+
+    pathway <- surv_os_pathway_scores$Pathway[input$surv_os_pathway_tbl_rows_selected]
+
+    genes <- pathway_mdata %>%
+      filter(gene_set == pathway) %>%
+      pull(genes) %>%
+      unlist()
+
+    surv_os_gene_scores %>%
+      filter(symbol %in% genes) %>%
+      select(Gene=symbol, `Rank (OS)`=rank, `P-value\n(metap)`=sumz_wt_pval, `P-value (metafor)`=metafor_pval, 
+             Description=description, CHR=chr_region, `Cell Cycle`=cell_cycle_phase, 
+             `DGIdb\ncategories`=dgidb_categories)
+
+  }, digits=4)
+
   output$surv_os_gene_tcga_tbl <- renderTable({
     surv_os_gene_tcga()
   }, digits=4)
 
-  output$surv_os_gene_tbl <- renderDT({
-    DT::datatable(surv_os_gene_scores, style="bootstrap", escape=FALSE,  rownames=FALSE,
+  output$surv_os_gene_scores_tbl <- renderDT({
+    df <- surv_os_gene_scores %>%
+      select(Gene=symbol, Rank=rank, `P-value\n(metap)`=sumz_wt_pval, 
+             `P-value\n(metafor)`=metafor_pval, Description=description,
+             CHR=chr_region, `Cell Cycle`=cell_cycle_phase, `DGIdb\ncategories`=dgidb_categories)
+
+    DT::datatable(df, style="bootstrap", escape=FALSE,  rownames=FALSE,
                   selection=selectOpts, options=tableOpts) %>%
       formatSignif(columns=c("P-value\n(metap)", "P-value\n(metafor)"), digits=3)
   })
