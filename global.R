@@ -62,7 +62,8 @@ geo_dir     <- file.path(cfg$data_dir, "geo")
 gene_mdata <- read_feather(file.path(results_dir, "metadata/genes.feather")) %>%
   select(-chr_subband)
 
-pathway_mdata <- read_feather(file.path(results_dir, "metadata/pathways.feather"))
+pathway_mdata <- read_feather(file.path(results_dir, "metadata/pathways.feather")) %>%
+  mutate(collection_size=length(genes))
 
 sample_mdata <- read_feather(file.path(results_dir, "metadata/samples.feather"))
 
@@ -110,8 +111,8 @@ surv_os_gene_scores <- read_feather(file.path(results_dir, "scores/combined/surv
     select(symbol, sumz_wt_pval, metafor_pval, description,
            chr_region, cell_cycle_phase, dgidb_categories) %>%
     arrange(sumz_wt_pval) %>%
-    mutate(rank=dense_rank(sumz_wt_pval)) %>%
-    select(rank, everything())
+    mutate(Rank=dense_rank(sumz_wt_pval)) %>%
+    select(Rank, everything())
 
 surv_os_gene_pvals   <- read_feather(file.path(results_dir, "associations/survival_os/gene/pvals.feather"))
 surv_os_gene_errors  <- read_feather(file.path(results_dir, "associations/survival_os/gene/errors.feather"))
@@ -120,11 +121,13 @@ surv_os_gene_effects <- read_feather(file.path(results_dir, "associations/surviv
 surv_os_pathway_scores <- read_feather(file.path(results_dir, "scores/combined/survival_os/pathway.feather")) %>%
     left_join(pathway_mdata, by='gene_set') %>%
     filter(num_missing <= cfg$max_missing$surv_os) %>%
-    select(Pathway=gene_set, sumz_wt_pval, `P-value\n(metafor)`=metafor_pval, Collection=collection) %>%
+    select(Pathway=gene_set, sumz_wt_pval, 
+           `P-value\n(metafor)`=metafor_pval, Collection=collection, 
+           `# Genes`=collection_size) %>%
     arrange(sumz_wt_pval) %>%
-    mutate(rank=dense_rank(sumz_wt_pval)) %>%
+    mutate(Rank=dense_rank(sumz_wt_pval)) %>%
     rename(`P-value\n(metap)`=sumz_wt_pval) %>%
-    select(rank, everything())
+    select(Rank, everything())
 
 surv_os_pathway_pvals   <- read_feather(file.path(results_dir, "associations/survival_os/pathway/pvals.feather"))
 surv_os_pathway_errors  <- read_feather(file.path(results_dir, "associations/survival_os/pathway/errors.feather"))
@@ -133,15 +136,15 @@ surv_os_pathway_effects <- read_feather(file.path(results_dir, "associations/sur
 #--------------------------------
 # 3. Progression free survival 
 #--------------------------------
-gene_scores_surv_pfs <- read_feather(file.path(results_dir, "scores/combined/survival_pfs/gene.feather")) %>%
+surv_pfs_gene_scores <- read_feather(file.path(results_dir, "scores/combined/survival_pfs/gene.feather")) %>%
     left_join(gene_mdata, by='symbol') %>%
     filter(num_missing <= cfg$max_missing$surv_pfs) %>%
-    select(Gene=symbol, sumz_wt_pval, `P-value\n(metafor)`=metafor_pval, Description=description,
+    select(symbol, sumz_wt_pval, `P-value\n(metafor)`=metafor_pval, Description=description,
            CHR=chr_region, `Cell Cycle`=cell_cycle_phase, `DGIdb\ncategories`=dgidb_categories) %>%
     arrange(sumz_wt_pval) %>%
-    mutate(rank=dense_rank(sumz_wt_pval)) %>%
+    mutate(Rank=dense_rank(sumz_wt_pval)) %>%
     rename(`P-value\n(metap)`=sumz_wt_pval) %>%
-    select(rank, everything())
+    select(Rank, everything())
 
 
 #--------------------------------

@@ -36,7 +36,7 @@ ui <- function(request) {
               width=6,
               fluidRow(
                 column(
-                  width=3, 
+                  width=4, 
                   uiOutput("surv_os_gene_summary_html"),
                 )
               ),

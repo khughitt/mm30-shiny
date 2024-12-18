@@ -13,7 +13,7 @@ server <- function(input, output, session) {
     sort(TRUE)
 
   surv_os_gene_selected <- reactive({
-    surv_os_gene_scores$Gene[input$surv_os_gene_tbl_rows_selected]
+    surv_os_gene_scores$symbol[input$surv_os_gene_scores_tbl_rows_selected]
   })
 
   surv_os_pathway_selected <- reactive({
@@ -21,7 +21,7 @@ server <- function(input, output, session) {
   })
 
   surv_os_gene_details <- reactive({
-    req(input$surv_os_gene_tbl_rows_selected)
+    req(input$surv_os_gene_scores_tbl_rows_selected)
 
     gene <- surv_os_gene_selected()
 
@@ -67,7 +67,7 @@ server <- function(input, output, session) {
   })
 
   surv_os_gene_tcga <- reactive({
-    req(input$surv_os_gene_tbl_rows_selected)
+    req(input$surv_os_gene_scores_tbl_rows_selected)
     gene <- surv_os_gene_selected()
 
     tcga %>%
@@ -76,20 +76,21 @@ server <- function(input, output, session) {
   })
 
   output$surv_os_gene_summary_html <- renderUI({
-      req(input$surv_os_gene_tbl_rows_selected)
+      req(input$surv_os_gene_scores_tbl_rows_selected)
+
       gene <- surv_os_gene_selected()
 
       all_rank <- gene_scores_all %>% 
         filter(symbol == gene) %>%
-        pull(rank)
+        pull(Rank)
 
       surv_os_rank <- surv_os_gene_scores %>% 
-        filter(Gene == gene) %>%
-        pull(rank)
+        filter(symbol == gene) %>%
+        pull(Rank)
 
-      surv_pfs_rank <- gene_scores_surv_pfs %>% 
-        filter(Gene == gene) %>%
-        pull(rank)
+      surv_pfs_rank <- surv_pfs_gene_scores %>% 
+        filter(symbol == gene) %>%
+        pull(Rank)
 
       tagList(
         tags$h2(gene),
@@ -128,7 +129,7 @@ server <- function(input, output, session) {
 
     surv_os_gene_scores %>%
       filter(symbol %in% genes) %>%
-      select(Gene=symbol, `Rank (OS)`=rank, `P-value\n(metap)`=sumz_wt_pval, `P-value (metafor)`=metafor_pval, 
+      select(Gene=symbol, `Rank (OS)`=Rank, `P-value\n(metap)`=sumz_wt_pval, `P-value (metafor)`=metafor_pval, 
              Description=description, CHR=chr_region, `Cell Cycle`=cell_cycle_phase, 
              `DGIdb\ncategories`=dgidb_categories)
 
@@ -140,7 +141,7 @@ server <- function(input, output, session) {
 
   output$surv_os_gene_scores_tbl <- renderDT({
     df <- surv_os_gene_scores %>%
-      select(Gene=symbol, Rank=rank, `P-value\n(metap)`=sumz_wt_pval, 
+      select(Gene=symbol, Rank, `P-value\n(metap)`=sumz_wt_pval, 
              `P-value\n(metafor)`=metafor_pval, Description=description,
              CHR=chr_region, `Cell Cycle`=cell_cycle_phase, `DGIdb\ncategories`=dgidb_categories)
 
@@ -156,7 +157,7 @@ server <- function(input, output, session) {
   })
 
   output$surv_os_plot <- renderPlot({
-    req(input$surv_os_gene_tbl_rows_selected)
+    req(input$surv_os_gene_scores_tbl_rows_selected)
 
     plts <- list()
 
