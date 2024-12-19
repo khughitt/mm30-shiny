@@ -62,7 +62,7 @@ geo_dir     <- file.path(cfg$data_dir, "geo")
 gene_mdata <- read_feather(file.path(results_dir, "metadata/genes.feather")) %>%
   select(-chr_subband)
 
-pathway_mdata <- read_feather(file.path(results_dir, "metadata/pathways.feather")) %>%
+pathway_mdata <- read_feather(file.path(results_dir, "metadata/gene_sets.feather")) %>%
   mutate(collection_size=length(genes))
 
 sample_mdata <- read_feather(file.path(results_dir, "metadata/samples.feather"))
@@ -118,7 +118,7 @@ surv_os_gene_pvals   <- read_feather(file.path(results_dir, "associations/surviv
 surv_os_gene_errors  <- read_feather(file.path(results_dir, "associations/survival_os/gene/errors.feather"))
 surv_os_gene_effects <- read_feather(file.path(results_dir, "associations/survival_os/gene/effects.feather"))
 
-surv_os_pathway_scores <- read_feather(file.path(results_dir, "scores/combined/survival_os/pathway.feather")) %>%
+surv_os_pathway_scores <- read_feather(file.path(results_dir, "scores/combined/survival_os/gene_set.feather")) %>%
     left_join(pathway_mdata, by='gene_set') %>%
     filter(num_missing <= cfg$max_missing$surv_os) %>%
     select(Pathway=gene_set, sumz_wt_pval, 
@@ -129,9 +129,9 @@ surv_os_pathway_scores <- read_feather(file.path(results_dir, "scores/combined/s
     rename(`P-value\n(metap)`=sumz_wt_pval) %>%
     select(Rank, everything())
 
-surv_os_pathway_pvals   <- read_feather(file.path(results_dir, "associations/survival_os/pathway/pvals.feather"))
-surv_os_pathway_errors  <- read_feather(file.path(results_dir, "associations/survival_os/pathway/errors.feather"))
-surv_os_pathway_effects <- read_feather(file.path(results_dir, "associations/survival_os/pathway/effects.feather"))
+surv_os_pathway_pvals   <- read_feather(file.path(results_dir, "associations/survival_os/gene_set/pvals.feather"))
+surv_os_pathway_errors  <- read_feather(file.path(results_dir, "associations/survival_os/gene_set/errors.feather"))
+surv_os_pathway_effects <- read_feather(file.path(results_dir, "associations/survival_os/gene_set/effects.feather"))
 
 #--------------------------------
 # 3. Progression free survival 
