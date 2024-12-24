@@ -17,7 +17,7 @@ server <- function(input, output, session) {
   })
 
   surv_os_gene_set_selected <- reactive({
-    surv_os_gene_set_scores$`Gene set`[input$surv_os_gene_set_tbl_rows_selected]
+    surv_os_gene_set_scores$gene_set[input$surv_os_gene_set_scores_tbl_rows_selected]
   })
 
   surv_os_gene_details <- reactive({
@@ -44,20 +44,18 @@ server <- function(input, output, session) {
   })
 
   surv_os_gene_set_details <- reactive({
-    req(input$surv_os_gene_set_tbl_rows_selected)
+    req(input$surv_os_gene_set_scores_tbl_rows_selected)
 
-    gene_set <- surv_os_gene_set_selected()
+    selected_gene_set <- surv_os_gene_set_selected()
 
     df <- bind_rows(
       surv_os_gene_set_pvals %>%
-        filter(gene_set == gene_set),
+        filter(gene_set == selected_gene_set),
       surv_os_gene_set_effects %>%
-        filter(gene_set == gene_set),
+        filter(gene_set == selected_gene_set),
       surv_os_gene_set_errors %>%
-        filter(gene_set == gene_set)
+        filter(gene_set == selected_gene_set)
     )
-
-    save.image()
 
     df %>%
       select(-gene_set) %>%
@@ -68,76 +66,13 @@ server <- function(input, output, session) {
       mutate(Dataset=str_replace(Dataset, '_overall_survival', ''))
   })
 
-  surv_os_gene_tcga <- reactive({
-    req(input$surv_os_gene_scores_tbl_rows_selected)
-    gene <- surv_os_gene_selected()
+  tcga_associations_tbl <- reactive({
+    req(!is.null(selectedGene()))
+    gene <- selectedGene()
 
     tcga %>%
-      filter(symbol == gene) %>%
-      select(-symbol, -ensgene)
-  })
-
-  # selectedGene <- reactiveValue()
-  #
-  # output$gene_summary_html <- renderUI({
-  #     #req(input$surv_os_gene_scores_tbl_rows_selected)
-  #
-  #     gene <- surv_os_gene_selected()
-  #
-  #     all_rank <- gene_scores_all %>%
-  #       filter(symbol == gene) %>%
-  #       pull(Rank)
-  #
-  #     surv_os_rank <- surv_os_gene_scores %>%
-  #       filter(symbol == gene) %>%
-  #       pull(Rank)
-  #
-  #     surv_pfs_rank <- surv_pfs_gene_scores %>%
-  #       filter(symbol == gene) %>%
-  #       pull(Rank)
-  #
-  #     tagList(
-  #       tags$h2(gene),
-  #       br(),
-  #       tags$h4("MM30 Rankings:"),
-  #       br(),
-  #       HTML(sprintf("All: <b>%d</b>",  all_rank)),
-  #       br(),
-  #       HTML(sprintf("Overall Survival (OS): <b>%d</b>", surv_os_rank)),
-  #       br(),
-  #       HTML(sprintf("Progression-free Survival (PFS): <b>%d</b>", surv_pfs_rank))
-  #     )
-  # })
-  #
-
-  output$surv_os_gene_summary_html <- renderUI({
-      req(input$surv_os_gene_scores_tbl_rows_selected)
-
-      gene <- surv_os_gene_selected()
-
-      all_rank <- gene_scores_all %>% 
         filter(symbol == gene) %>%
-        pull(Rank)
-
-      surv_os_rank <- surv_os_gene_scores %>% 
-        filter(symbol == gene) %>%
-        pull(Rank)
-
-      surv_pfs_rank <- surv_pfs_gene_scores %>% 
-        filter(symbol == gene) %>%
-        pull(Rank)
-
-      tagList(
-        tags$h2(gene),
-        br(),
-        tags$h4("MM30 Rankings:"),
-        br(),
-        HTML(sprintf("All: <b>%d</b>",  all_rank)), 
-        br(),
-        HTML(sprintf("Overall Survival (OS): <b>%d</b>", surv_os_rank)), 
-        br(),
-        HTML(sprintf("Progression-free Survival (PFS): <b>%d</b>", surv_pfs_rank))
-      )
+        select(-symbol, -ensgene)
   })
 
   output$surv_os_gene_set_summary_html <- renderUI({
@@ -153,9 +88,9 @@ server <- function(input, output, session) {
   }, digits=-3)
 
   output$surv_os_gene_set_gene_tbl <- renderTable({
-    req(input$surv_os_gene_set_tbl_rows_selected)
+    req(input$surv_os_gene_set_scores_tbl_rows_selected)
 
-    #gene_set <- surv_os_gene_set_scores$`Gene set`[input$surv_os_gene_set_tbl_rows_selected]
+    #gene_set <- surv_os_gene_set_scores$gene_set[input$surv_os_gene_set_scores_tbl_rows_selected]
     selected <- surv_os_gene_set_selected()
 
     genes <- gene_set_mdata %>%
@@ -171,8 +106,9 @@ server <- function(input, output, session) {
 
   }, digits=4)
 
-  output$surv_os_gene_tcga_tbl <- renderTable({
-    surv_os_gene_tcga()
+  output$surv_os_gene_tcga_tbl <- output$stage_gene_tcga_tbl <- renderTable({
+    # rv$tcga_tbl
+    tcga_associations_tbl()
   }, digits=4)
 
   output$surv_os_gene_scores_tbl <- renderDT({
@@ -186,7 +122,7 @@ server <- function(input, output, session) {
       formatSignif(columns=c("P-value\n(metap)", "P-value\n(metafor)"), digits=3)
   })
 
-  output$surv_os_gene_set_tbl <- renderDT({
+  output$surv_os_gene_set_scores_tbl <- renderDT({
     DT::datatable(surv_os_gene_set_scores, style="bootstrap", escape=FALSE,  rownames=FALSE,
                   selection=selectOpts, options=tableOpts) %>%
       formatSignif(columns=c("P-value\n(metap)", "P-value\n(metafor)"), digits=3)
@@ -241,7 +177,7 @@ server <- function(input, output, session) {
   })
 
   stage_gene_set_selected <- reactive({
-    stage_gene_set_scores$`Gene set`[input$stage_gene_set_tbl_rows_selected]
+    stage_gene_set_scores$gene_set[input$stage_gene_set_scores_tbl_rows_selected]
   })
 
   stage_gene_details <- reactive({
@@ -268,17 +204,17 @@ server <- function(input, output, session) {
   })
 
   stage_gene_set_details <- reactive({
-    req(input$stage_gene_set_tbl_rows_selected)
+    req(input$stage_gene_set_scores_tbl_rows_selected)
 
-    gene_set <- stage_gene_set_selected()
+    selected_gene_set <- stage_gene_set_selected()
 
     df <- bind_rows(
       stage_gene_set_pvals %>%
-        filter(gene_set == gene_set),
+        filter(gene_set == selected_gene_set),
       stage_gene_set_effects %>%
-        filter(gene_set == gene_set),
+        filter(gene_set == selected_gene_set),
       stage_gene_set_errors %>%
-        filter(gene_set == gene_set)
+        filter(gene_set == selected_gene_set)
     )
 
     df %>%
@@ -290,19 +226,9 @@ server <- function(input, output, session) {
       mutate(Dataset=str_replace(Dataset, '_disease_stage', ''))
   })
 
-  stage_gene_tcga <- reactive({
-    req(input$stage_gene_scores_tbl_rows_selected)
-    gene <- stage_gene_selected()
-
-    tcga %>%
-      filter(symbol == gene) %>%
-      select(-symbol, -ensgene)
-  })
-
-  output$stage_gene_summary_html <- renderUI({
-      req(input$stage_gene_scores_tbl_rows_selected)
-
-      gene <- stage_gene_selected()
+  output$stage_gene_summary_html <- output$surv_os_gene_summary_html <- output$surv_pfs_gene_summary_html <- renderUI({
+      req(!is.null(selectedGene()))
+      gene <- selectedGene()
 
       all_rank <- gene_scores_all %>% 
         filter(symbol == gene) %>%
@@ -329,9 +255,52 @@ server <- function(input, output, session) {
       )
   })
 
-  output$stage_gene_set_summary_html <- renderUI({
-    tagList(tags$h2("PLACEHOLDER"))
+  output$stage_gene_set_summary_html <- output$surv_os_gene_set_summary_html  <- output$surv_pfs_gene_set_summary_html <- renderUI({
+      req(!is.null(selectedGeneSet()))
+      selected_gene_set <- selectedGeneSet()
+
+      all_rank <- gene_set_scores_all %>% 
+        filter(gene_set == selected_gene_set) %>%
+        pull(Rank)
+
+      surv_os_rank <- surv_os_gene_set_scores %>% 
+        filter(gene_set == selected_gene_set) %>%
+        pull(Rank)
+
+      surv_pfs_rank <- surv_pfs_gene_set_scores %>% 
+        filter(gene_set == selected_gene_set) %>%
+        pull(Rank)
+
+      gene_set_info <- gene_set_mdata %>%
+        filter(gene_set == selected_gene_set)
+
+      collection <- gene_set_info %>%
+        pull(collection)
+
+      url <- gene_set_info %>%
+        pull(url)
+
+      num_genes <- gene_set_info %>%
+        pull(collection_size)
+
+      log_info(all_rank)
+      log_info(surv_os_rank)
+      log_info(surv_pfs_rank)
+
+      tagList(
+        tags$h2(sprintf("%s / %s (n=%d)", collection, selected_gene_set, num_genes)),
+        br(),
+        tags$a(url, target="_blank", href=url),
+        tags$h4("MM30 Rankings:"),
+        br(),
+        HTML(sprintf("All: <b>%d</b>",  all_rank)), 
+        br(),
+        HTML(sprintf("Overall Survival (OS): <b>%d</b>", surv_os_rank)), 
+        br(),
+        HTML(sprintf("Progression-free Survival (PFS): <b>%d</b>", surv_pfs_rank))
+      )
   })
+
 
   output$stage_gene_details_tbl <- renderTable({
     stage_gene_details()
@@ -342,9 +311,9 @@ server <- function(input, output, session) {
   }, digits=-3)
 
   output$stage_gene_set_gene_tbl <- renderTable({
-    req(input$stage_gene_set_tbl_rows_selected)
+    req(input$stage_gene_set_scores_tbl_rows_selected)
 
-    gene_set <- stage_gene_set_scores$`Gene set`[input$stage_gene_set_tbl_rows_selected]
+    gene_set <- stage_gene_set_scores$gene_set[input$stage_gene_set_scores_tbl_rows_selected]
 
     genes <- gene_set_mdata %>%
       filter(gene_set == gene_set) %>%
@@ -359,10 +328,6 @@ server <- function(input, output, session) {
 
   }, digits=4)
 
-  output$stage_gene_tcga_tbl <- renderTable({
-    stage_gene_tcga()
-  }, digits=4)
-
   output$stage_gene_scores_tbl <- renderDT({
     df <- stage_gene_scores %>%
       select(Gene=symbol, Rank, `P-value\n(metap)`=sumz_wt_pval, 
@@ -374,8 +339,11 @@ server <- function(input, output, session) {
       formatSignif(columns=c("P-value\n(metap)", "P-value\n(metafor)"), digits=3)
   })
 
-  output$stage_gene_set_tbl <- renderDT({
-    DT::datatable(stage_gene_set_scores, style="bootstrap", escape=FALSE,  rownames=FALSE,
+  output$stage_gene_set_scores_tbl <- renderDT({
+    df <- stage_gene_set_scores %>%
+      select(`Gene set`=gene_set, everything())
+
+    DT::datatable(df, style="bootstrap", escape=FALSE,  rownames=FALSE,
                   selection=selectOpts, options=tableOpts) %>%
       formatSignif(columns=c("P-value\n(metap)", "P-value\n(metafor)"), digits=3)
   })
@@ -447,15 +415,22 @@ server <- function(input, output, session) {
       ylab("Count")
   })
 
-  # common row focus
-  observeEvent(surv_os_gene_selected, function() {
-    message(surv_os_gene_selected())
-    # selectedGene <- ...
+  # common variables to store selected gene / gene set
+  selectedGene <- reactiveVal()
+  selectedGeneSet <- reactiveVal()
+
+  observeEvent(input$surv_os_gene_scores_tbl_rows_selected, {
+    selectedGene(surv_os_gene_selected())
+  })
+  observeEvent(input$stage_gene_scores_tbl_rows_selected, {
+    selectedGene(stage_gene_selected())
   })
 
-  observeEvent(stage_gene_selected, function() {
-    message(stage_gene_selected())
-    # selectedGene <- ...
+  observeEvent(input$surv_os_gene_set_scores_tbl_rows_selected, {
+    selectedGeneSet(surv_os_gene_set_selected())
+  })
+  observeEvent(input$stage_gene_set_scores_tbl_rows_selected, {
+    selectedGeneSet(stage_gene_set_selected())
   })
 
   # bookmarking support

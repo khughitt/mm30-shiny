@@ -36,7 +36,7 @@ ui <- function(request) {
               width=6,
               fluidRow(
                 column(
-                  width=4, 
+                  width=6, 
                   uiOutput("surv_os_gene_summary_html"),
                 )
               ),
@@ -62,13 +62,13 @@ ui <- function(request) {
           fluidRow(
             column(
               width=6,
-              withSpinner(DTOutput("surv_os_gene_set_tbl"))
+              withSpinner(DTOutput("surv_os_gene_set_scores_tbl"))
             ),
             column(
               width=6,
               fluidRow(
                 column(
-                  width=3, 
+                  width=6, 
                   uiOutput("surv_os_gene_set_summary_html"),
                 )
               ),
@@ -80,7 +80,7 @@ ui <- function(request) {
               tableOutput("surv_os_gene_set_details_tbl"),
               tagList(
                 tags$hr(),
-                tags$h3("Genes:"),
+                tags$h3("Gene set members:"),
               ),
               tableOutput("surv_os_gene_set_gene_tbl"),
             ),
@@ -129,20 +129,20 @@ ui <- function(request) {
           ),
         ),
         #---------------------------------------
-        # Diseease stage > gene sets
+        # Disease stage > gene sets
         #---------------------------------------
         conditionalPanel(
           condition = "input.stage_feat_type == 'gene_sets'",
           fluidRow(
             column(
               width=6,
-              withSpinner(DTOutput("stage_gene_set_tbl"))
+              withSpinner(DTOutput("stage_gene_set_scores_tbl"))
             ),
             column(
               width=6,
               fluidRow(
                 column(
-                  width=3, 
+                  width=6, 
                   uiOutput("stage_gene_set_summary_html"),
                 )
               ),

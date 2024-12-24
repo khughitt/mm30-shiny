@@ -102,6 +102,11 @@ gene_scores_all <- read_feather(file.path(results_dir, "scores/metap/all/gene.fe
 
 gene_scores_all$Rank <- 1:nrow(gene_scores_all)
 
+gene_set_scores_all <- read_feather(file.path(results_dir, "scores/metap/all/gene_set.feather")) %>%
+  left_join(gene_set_mdata, by='gene_set')
+
+gene_set_scores_all$Rank <- 1:nrow(gene_set_scores_all)
+
 #--------------------------------
 # 3. Overall survival
 #--------------------------------
@@ -121,7 +126,7 @@ surv_os_gene_effects <- read_feather(file.path(results_dir, "associations/surviv
 surv_os_gene_set_scores <- read_feather(file.path(results_dir, "scores/combined/survival_os/gene_set.feather")) %>%
     left_join(gene_set_mdata, by='gene_set') %>%
     filter(num_missing <= cfg$max_missing$surv_os) %>%
-    select(`Gene set`=gene_set, sumz_wt_pval, 
+    select(gene_set, sumz_wt_pval, 
            `P-value\n(metafor)`=metafor_pval, Collection=collection, 
            `# Genes`=collection_size) %>%
     arrange(sumz_wt_pval) %>%
@@ -146,6 +151,21 @@ surv_pfs_gene_scores <- read_feather(file.path(results_dir, "scores/combined/sur
     rename(`P-value\n(metap)`=sumz_wt_pval) %>%
     select(Rank, everything())
 
+surv_pfs_gene_set_scores <- read_feather(file.path(results_dir, "scores/combined/survival_pfs/gene_set.feather")) %>%
+    left_join(gene_set_mdata, by='gene_set') %>%
+    filter(num_missing <= cfg$max_missing$surv_pfs) %>%
+    select(gene_set, sumz_wt_pval, 
+           `P-value\n(metafor)`=metafor_pval, Collection=collection, 
+           `# Genes`=collection_size) %>%
+    arrange(sumz_wt_pval) %>%
+    mutate(Rank=dense_rank(sumz_wt_pval)) %>%
+    rename(`P-value\n(metap)`=sumz_wt_pval) %>%
+    select(Rank, everything())
+
+surv_pfs_gene_set_pvals   <- read_feather(file.path(results_dir, "associations/survival_pfs/gene_set/pvals.feather"))
+surv_pfs_gene_set_errors  <- read_feather(file.path(results_dir, "associations/survival_pfs/gene_set/errors.feather"))
+surv_pfs_gene_set_effects <- read_feather(file.path(results_dir, "associations/survival_pfs/gene_set/effects.feather"))
+
 #--------------------------------
 # x. Disease stage
 #--------------------------------
@@ -168,7 +188,7 @@ stage_gene_scaled_expr <- read_feather(file.path(results_dir, "disease_stage/sca
 stage_gene_set_scores <- read_feather(file.path(results_dir, "scores/combined/disease_stage/gene_set.feather")) %>%
     left_join(gene_set_mdata, by='gene_set') %>%
     filter(num_missing <= cfg$max_missing$disease_stage) %>%
-    select(`Gene set`=gene_set, sumz_wt_pval, 
+    select(gene_set, sumz_wt_pval, 
            `P-value\n(metafor)`=metafor_pval, Collection=collection, 
            `# Genes`=collection_size) %>%
     arrange(sumz_wt_pval) %>%
