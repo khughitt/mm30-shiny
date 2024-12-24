@@ -17,10 +17,10 @@ ui <- function(request) {
       # Overall survival
       ######################################## 
       tabPanel(
-        "OS",
+        "Survival (OS)",
         fluidRow(
-          selectInput("surv_os_feat_type", "Genes / Pathways:", 
-                      c("Genes"="genes", "Pathways"="pathways"))
+          selectInput("surv_os_feat_type", "Genes / Gene sets:", 
+                      c("Genes"="genes", "Gene sets"="gene_sets"))
         ),
         #---------------------------------------
         # Overall survival > genes
@@ -55,21 +55,21 @@ ui <- function(request) {
           ),
         ),
         #---------------------------------------
-        # Overall survival > pathways
+        # Overall survival > gene sets
         #---------------------------------------
         conditionalPanel(
-          condition = "input.surv_os_feat_type == 'pathways'",
+          condition = "input.surv_os_feat_type == 'gene_sets'",
           fluidRow(
             column(
               width=6,
-              withSpinner(DTOutput("surv_os_pathway_tbl"))
+              withSpinner(DTOutput("surv_os_gene_set_tbl"))
             ),
             column(
               width=6,
               fluidRow(
                 column(
                   width=3, 
-                  uiOutput("surv_os_pathway_summary_html"),
+                  uiOutput("surv_os_gene_set_summary_html"),
                 )
               ),
               #withSpinner(plotOutput("surv_os_plot", height="800px")),
@@ -77,16 +77,93 @@ ui <- function(request) {
                 tags$hr(),
                 tags$h3("Survival regression results:")
               ),
-              tableOutput("surv_os_pathway_details_tbl"),
+              tableOutput("surv_os_gene_set_details_tbl"),
               tagList(
                 tags$hr(),
                 tags$h3("Genes:"),
               ),
-              tableOutput("surv_os_pathway_gene_tbl"),
+              tableOutput("surv_os_gene_set_gene_tbl"),
             ),
           ),
         ),
       ),
+      ######################################## 
+      # Disease stage
+      ######################################## 
+      tabPanel(
+        "Disease Stage",
+        fluidRow(
+          selectInput("stage_feat_type", "Genes / Gene sets:", 
+                      c("Genes"="genes", "Gene sets"="gene_sets"))
+        ),
+        #---------------------------------------
+        # Disease stage > genes
+        #---------------------------------------
+        conditionalPanel(
+          condition = "input.stage_feat_type == 'genes'",
+          fluidRow(
+            column(
+              width=6,
+              withSpinner(DTOutput("stage_gene_scores_tbl"))
+            ),
+            column(
+              width=6,
+              fluidRow(
+                column(
+                  width=3, 
+                  uiOutput("stage_gene_summary_html"),
+                )
+              ),
+              withSpinner(plotOutput("stage_plot", height="800px")),
+              tagList(
+                tags$hr(),
+                tags$h3("Logistic regression results:")
+              ),
+              tableOutput("stage_gene_details_tbl"),
+              tagList(
+                tags$hr(),
+                tags$h3("TCGA survival associations:")
+              ),
+              tableOutput("stage_gene_tcga_tbl")
+            ),
+          ),
+        ),
+        #---------------------------------------
+        # Diseease stage > gene sets
+        #---------------------------------------
+        conditionalPanel(
+          condition = "input.stage_feat_type == 'gene_sets'",
+          fluidRow(
+            column(
+              width=6,
+              withSpinner(DTOutput("stage_gene_set_tbl"))
+            ),
+            column(
+              width=6,
+              fluidRow(
+                column(
+                  width=3, 
+                  uiOutput("stage_gene_set_summary_html"),
+                )
+              ),
+              #withSpinner(plotOutput("stage_plot", height="800px")),
+              tagList(
+                tags$hr(),
+                tags$h3("Regression results:")
+              ),
+              tableOutput("stage_gene_set_details_tbl"),
+              tagList(
+                tags$hr(),
+                tags$h3("Genes:"),
+              ),
+              tableOutput("stage_gene_set_gene_tbl"),
+            ),
+          ),
+        ),
+      ),
+      ######################################## 
+      # Cell Lines
+      ######################################## 
       tabPanel(
         "Cell Lines",
         fluidRow(
@@ -109,11 +186,14 @@ ui <- function(request) {
           ),
         ),
       ),
-      tabPanel(
-        "Settings",
-        fluidRow(
-        )
-      )
+      ######################################## 
+      # Settings
+      ######################################## 
+      # tabPanel(
+      #   "Settings",
+      #   fluidRow(
+      #   )
+      # )
     )
   )
 }

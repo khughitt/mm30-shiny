@@ -62,8 +62,8 @@ geo_dir     <- file.path(cfg$data_dir, "geo")
 gene_mdata <- read_feather(file.path(results_dir, "metadata/genes.feather")) %>%
   select(-chr_subband)
 
-pathway_mdata <- read_feather(file.path(results_dir, "metadata/gene_sets.feather")) %>%
-  mutate(collection_size=length(genes))
+gene_set_mdata <- read_feather(file.path(results_dir, "metadata/gene_sets.feather")) %>%
+  mutate(collection_size=lengths(genes))
 
 sample_mdata <- read_feather(file.path(results_dir, "metadata/samples.feather"))
 
@@ -118,10 +118,10 @@ surv_os_gene_pvals   <- read_feather(file.path(results_dir, "associations/surviv
 surv_os_gene_errors  <- read_feather(file.path(results_dir, "associations/survival_os/gene/errors.feather"))
 surv_os_gene_effects <- read_feather(file.path(results_dir, "associations/survival_os/gene/effects.feather"))
 
-surv_os_pathway_scores <- read_feather(file.path(results_dir, "scores/combined/survival_os/gene_set.feather")) %>%
-    left_join(pathway_mdata, by='gene_set') %>%
+surv_os_gene_set_scores <- read_feather(file.path(results_dir, "scores/combined/survival_os/gene_set.feather")) %>%
+    left_join(gene_set_mdata, by='gene_set') %>%
     filter(num_missing <= cfg$max_missing$surv_os) %>%
-    select(Pathway=gene_set, sumz_wt_pval, 
+    select(`Gene set`=gene_set, sumz_wt_pval, 
            `P-value\n(metafor)`=metafor_pval, Collection=collection, 
            `# Genes`=collection_size) %>%
     arrange(sumz_wt_pval) %>%
@@ -129,12 +129,12 @@ surv_os_pathway_scores <- read_feather(file.path(results_dir, "scores/combined/s
     rename(`P-value\n(metap)`=sumz_wt_pval) %>%
     select(Rank, everything())
 
-surv_os_pathway_pvals   <- read_feather(file.path(results_dir, "associations/survival_os/gene_set/pvals.feather"))
-surv_os_pathway_errors  <- read_feather(file.path(results_dir, "associations/survival_os/gene_set/errors.feather"))
-surv_os_pathway_effects <- read_feather(file.path(results_dir, "associations/survival_os/gene_set/effects.feather"))
+surv_os_gene_set_pvals   <- read_feather(file.path(results_dir, "associations/survival_os/gene_set/pvals.feather"))
+surv_os_gene_set_errors  <- read_feather(file.path(results_dir, "associations/survival_os/gene_set/errors.feather"))
+surv_os_gene_set_effects <- read_feather(file.path(results_dir, "associations/survival_os/gene_set/effects.feather"))
 
 #--------------------------------
-# 3. Progression free survival 
+# 4. Progression free survival 
 #--------------------------------
 surv_pfs_gene_scores <- read_feather(file.path(results_dir, "scores/combined/survival_pfs/gene.feather")) %>%
     left_join(gene_mdata, by='symbol') %>%
@@ -146,6 +146,41 @@ surv_pfs_gene_scores <- read_feather(file.path(results_dir, "scores/combined/sur
     rename(`P-value\n(metap)`=sumz_wt_pval) %>%
     select(Rank, everything())
 
+#--------------------------------
+# x. Disease stage
+#--------------------------------
+stage_gene_scores <- read_feather(file.path(results_dir, "scores/combined/disease_stage/gene.feather")) %>%
+    left_join(gene_mdata, by='symbol') %>%
+    filter(num_missing <= cfg$max_missing$disease_stage) %>%
+    select(symbol, sumz_wt_pval, metafor_pval, description,
+           chr_region, cell_cycle_phase, dgidb_categories) %>%
+    arrange(sumz_wt_pval) %>%
+    mutate(Rank=dense_rank(sumz_wt_pval)) %>%
+    select(Rank, everything())
+
+stage_gene_pvals   <- read_feather(file.path(results_dir, "associations/disease_stage/gene/pvals.feather"))
+stage_gene_errors  <- read_feather(file.path(results_dir, "associations/disease_stage/gene/errors.feather"))
+stage_gene_effects <- read_feather(file.path(results_dir, "associations/disease_stage/gene/effects.feather"))
+
+stage_gene_scaled_expr <- read_feather(file.path(results_dir, "disease_stage/scaled/gene", "combined.feather")) %>%
+  filter(!stage %in% c('early', 'late', 'pre_relapsed'))
+
+stage_gene_set_scores <- read_feather(file.path(results_dir, "scores/combined/disease_stage/gene_set.feather")) %>%
+    left_join(gene_set_mdata, by='gene_set') %>%
+    filter(num_missing <= cfg$max_missing$disease_stage) %>%
+    select(`Gene set`=gene_set, sumz_wt_pval, 
+           `P-value\n(metafor)`=metafor_pval, Collection=collection, 
+           `# Genes`=collection_size) %>%
+    arrange(sumz_wt_pval) %>%
+    mutate(Rank=dense_rank(sumz_wt_pval)) %>%
+    rename(`P-value\n(metap)`=sumz_wt_pval) %>%
+    select(Rank, everything())
+
+stage_gene_set_pvals   <- read_feather(file.path(results_dir, "associations/disease_stage/gene_set/pvals.feather"))
+stage_gene_set_errors  <- read_feather(file.path(results_dir, "associations/disease_stage/gene_set/errors.feather"))
+stage_gene_set_effects <- read_feather(file.path(results_dir, "associations/disease_stage/gene_set/effects.feather"))
+
+stage_gene_set_scaled_expr <- read_feather(file.path(results_dir, "disease_stage/scaled/gene_set", "combined.feather"))
 
 #--------------------------------
 # x. Combined expr
