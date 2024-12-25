@@ -376,8 +376,9 @@ server <- function(input, output, session) {
       filter(symbol == gene_name) %>%
       select(-symbol)
 
-    ggplot(df, aes(x=stage, y=expr)) +
+    ggplot(df, aes(x=stage, y=expr, fill=stage)) +
       geom_bar(stat="identity") +
+      scale_fill_manual(values=cfg$colors) +
       facet_wrap(~dataset, ncol=3, scales='free')
   })
 
@@ -434,28 +435,28 @@ server <- function(input, output, session) {
   })
 
   # bookmarking support
-  observe({
-    reactiveValuesToList(input)
-    session$doBookmark()
-  })
-  onBookmarked(updateQueryString)
-
-  setBookmarkExclude(c(
-    "disease_stage_tbl_rows_selected",
-    "disease_stage_tbl_columns_selected",
-    "disease_stage_tbl_cells_selected",
-    "disease_stage_tbl_rows_current",
-    "disease_stage_tbl_rows_all",
-    "disease_stage_tbl_state",
-    "disease_stage_tbl_search",
-    "disease_stage_tbl_cell_clicked",
-    "treatment_response_tbl_rows_selected",
-    "treatment_response_tbl_columns_selected",
-    "treatment_response_tbl_cells_selected",
-    "treatment_response_tbl_rows_current",
-    "treatment_response_tbl_rows_all",
-    "treatment_response_tbl_state",
-    "treatment_response_tbl_search",
-    "treatment_response_tbl_cell_clicked"
-  ))
+  # observe({
+  #   reactiveValuesToList(input)
+  #   session$doBookmark()
+  # })
+  # onBookmarked(updateQueryString)
+  #
+  # setBookmarkExclude(c(
+  #   "disease_stage_tbl_rows_selected",
+  #   "disease_stage_tbl_columns_selected",
+  #   "disease_stage_tbl_cells_selected",
+  #   "disease_stage_tbl_rows_current",
+  #   "disease_stage_tbl_rows_all",
+  #   "disease_stage_tbl_state",
+  #   "disease_stage_tbl_search",
+  #   "disease_stage_tbl_cell_clicked",
+  #   "treatment_response_tbl_rows_selected",
+  #   "treatment_response_tbl_columns_selected",
+  #   "treatment_response_tbl_cells_selected",
+  #   "treatment_response_tbl_rows_current",
+  #   "treatment_response_tbl_rows_all",
+  #   "treatment_response_tbl_state",
+  #   "treatment_response_tbl_search",
+  #   "treatment_response_tbl_cell_clicked"
+  # ))
 }
