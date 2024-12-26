@@ -40,17 +40,17 @@ ui <- function(request) {
                   uiOutput("surv_os_gene_summary_html"),
                 )
               ),
-              withSpinner(plotOutput("surv_os_plot", height="800px")),
-              tagList(
-                tags$hr(),
-                tags$h3("Survival regression results:")
+              withSpinner(plotOutput("surv_os_gene_plot", height="800px")),
+              withSpinner(
+                tagList(
+                  tags$hr(),
+                  tags$h3("Survival regression results:"),
+                  tableOutput("surv_os_gene_details_tbl"),
+                  tags$hr(),
+                  tags$h3("TCGA survival associations:"),
+                  tableOutput("surv_os_gene_tcga_tbl")
+                ),
               ),
-              tableOutput("surv_os_gene_details_tbl"),
-              tagList(
-                tags$hr(),
-                tags$h3("TCGA survival associations:")
-              ),
-              tableOutput("surv_os_gene_tcga_tbl")
             ),
           ),
         ),
@@ -72,17 +72,17 @@ ui <- function(request) {
                   uiOutput("surv_os_gene_set_summary_html"),
                 )
               ),
-              #withSpinner(plotOutput("surv_os_plot", height="800px")),
-              tagList(
-                tags$hr(),
-                tags$h3("Survival regression results:")
-              ),
-              tableOutput("surv_os_gene_set_details_tbl"),
-              tagList(
-                tags$hr(),
-                tags$h3("Gene set members:"),
-              ),
-              tableOutput("surv_os_gene_set_gene_tbl"),
+              withSpinner(plotOutput("surv_os_gene_set_plot", height="800px")),
+              withSpinner(
+                tagList(
+                  tags$hr(),
+                  tags$h3("Survival regression results:"),
+                  tableOutput("surv_os_gene_set_details_tbl"),
+                  tags$hr(),
+                  tags$h3("Gene set members:"),
+                  tableOutput("surv_os_gene_set_gene_tbl"),
+                ),
+              )
             ),
           ),
         ),
@@ -114,17 +114,17 @@ ui <- function(request) {
                   uiOutput("stage_gene_summary_html"),
                 )
               ),
-              withSpinner(plotOutput("stage_plot", height="800px")),
-              tagList(
-                tags$hr(),
-                tags$h3("Logistic regression results:")
+              withSpinner(plotOutput("stage_gene_plot", height="800px")),
+              withSpinner(
+                tagList(
+                  tags$hr(),
+                  tags$h3("Logistic regression results:"),
+                  tableOutput("stage_gene_details_tbl"),
+                  tags$hr(),
+                  tags$h3("TCGA survival associations:"),
+                  tableOutput("stage_gene_tcga_tbl")
+                ),
               ),
-              tableOutput("stage_gene_details_tbl"),
-              tagList(
-                tags$hr(),
-                tags$h3("TCGA survival associations:")
-              ),
-              tableOutput("stage_gene_tcga_tbl")
             ),
           ),
         ),
@@ -146,17 +146,17 @@ ui <- function(request) {
                   uiOutput("stage_gene_set_summary_html"),
                 )
               ),
-              #withSpinner(plotOutput("stage_plot", height="800px")),
-              tagList(
-                tags$hr(),
-                tags$h3("Regression results:")
-              ),
-              tableOutput("stage_gene_set_details_tbl"),
-              tagList(
-                tags$hr(),
-                tags$h3("Genes:"),
-              ),
-              tableOutput("stage_gene_set_gene_tbl"),
+              withSpinner(plotOutput("stage_gene_set_plot", height="800px")),
+              withSpinner(
+                tagList(
+                  tags$hr(),
+                  tags$h3("Regression results:"),
+                  tableOutput("stage_gene_set_details_tbl"),
+                  tags$hr(),
+                  tags$h3("Genes:"),
+                  tableOutput("stage_gene_set_gene_tbl"),
+                ),
+              )
             ),
           ),
         ),

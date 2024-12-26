@@ -200,13 +200,17 @@ stage_gene_set_pvals   <- read_feather(file.path(results_dir, "associations/dise
 stage_gene_set_errors  <- read_feather(file.path(results_dir, "associations/disease_stage/gene_set/errors.feather"))
 stage_gene_set_effects <- read_feather(file.path(results_dir, "associations/disease_stage/gene_set/effects.feather"))
 
-stage_gene_set_scaled_expr <- read_feather(file.path(results_dir, "disease_stage/scaled/gene_set", "combined.feather"))
+stage_gene_set_scaled_expr <- read_feather(file.path(results_dir, "disease_stage/scaled/gene_set", "combined.feather")) %>%
+  filter(!stage %in% c('early', 'late', 'pre_relapsed'))
 
 #--------------------------------
 # x. Combined expr
 #--------------------------------
-expr_dat <- read_feather(file.path(results_dir, "expr/gene/expr_scaled.feather")) %>%
+gene_expr <- read_feather(file.path(results_dir, "expr/gene/expr-scaled-full.feather")) %>%
   column_to_rownames("symbol")
+
+gene_set_expr <- read_feather(file.path(results_dir, "expr/gene_set/expr-scaled-full.feather")) %>%
+  column_to_rownames("gene_set")
 
 #--------------------------------
 # x. TCGA gene survival data
