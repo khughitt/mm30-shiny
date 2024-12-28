@@ -194,9 +194,6 @@ server <- function(input, output, session) {
       }
     }
 
-    log_info('made it!')
-    log_info(length(plts))
-
     arrange_ggsurvplots(plts, nrow=ceiling(length(plts) / 3), ncol=3,
                         title=sprintf("Overall survival (%s)", selected_gene_set))
   })
@@ -409,6 +406,42 @@ server <- function(input, output, session) {
       geom_bar(stat="identity") +
       scale_fill_manual(values=cfg$colors) +
       facet_wrap(~dataset, ncol=3, scales='free')
+  })
+
+  ##########
+  #
+  # Co-expression
+  #
+  ###########
+  gene_coex_df <- reactive({
+    feat1 <- input$coex_gene1
+    feat2 <- input$coex_gene2
+
+    gene_expr[c(feat1, feat2), ] %>%
+      t() %>%
+      as.data.frame() %>%
+      rownames_to_column("sample_id") %>%
+      inner_join(sample_mdata, by="sample_id")
+  })
+
+  output$gene_coex_plot <- renderPlot({
+    feat1 <- input$coex_gene1
+    feat2 <- input$coex_gene2
+
+    df <- gene_coex_df()
+
+    plt <- ggplot(df, aes(x=.data[[feat1]], y=.data[[feat2]])) +
+      ggtitle(sprintf("Gene expression: %s vs. %s", feat2, feat1)) +
+      xlab(feat1) +
+      ylab(feat2)
+
+    if (input$coex_gene_color != "none") {
+      plt <- plt + geom_point(aes(color=.data[[input$coex_gene_color]]))
+    } else {
+      plt <- plt + geom_point()
+    }
+
+    plt
   })
 
   ##########

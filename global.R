@@ -213,6 +213,25 @@ gene_set_expr <- read_feather(file.path(results_dir, "expr/gene_set/expr-scaled-
   column_to_rownames("gene_set")
 
 #--------------------------------
+# x. Co-expression
+#--------------------------------
+gene_coex <- read_feather(file.path(results_dir, "coex/gene/coex-scaled-5k.feather")) %>%
+  column_to_rownames("symbol")
+
+gene_set_coex <- read_feather(file.path(results_dir, "coex/gene_set/coex-scaled-5k.feather")) %>%
+  column_to_rownames("gene_set")
+
+gene_coex_opts <- gene_scores_all %>%
+  filter(symbol %in% rownames(gene_coex)) %>%
+  pull(symbol)
+
+log_info(paste0(head(gene_coex_opts, 3), collapse=' '))
+
+gene_set_coex_opts <- gene_set_scores_all %>%
+  filter(gene_set %in% rownames(gene_set_coex)) %>%
+  pull(gene_set)
+
+#--------------------------------
 # x. TCGA gene survival data
 #--------------------------------
 tcga <- read_feather("../scripts/data/hpa/hpa-cancer.feather")
