@@ -417,11 +417,14 @@ server <- function(input, output, session) {
     feat1 <- input$coex_gene1
     feat2 <- input$coex_gene2
 
-    gene_expr[c(feat1, feat2), ] %>%
+    df <- gene_expr[c(feat1, feat2), ] %>%
       t() %>%
       as.data.frame() %>%
       rownames_to_column("sample_id") %>%
-      inner_join(sample_mdata, by="sample_id")
+      left_join(sample_mdata, by="sample_id")
+
+    df$disease_stage[is.na(df$disease_stage)] <- "Unknown"
+    df[complete.cases(df), ]
   })
 
   output$gene_coex_plot <- renderPlot({
@@ -430,18 +433,12 @@ server <- function(input, output, session) {
 
     df <- gene_coex_df()
 
-    plt <- ggplot(df, aes(x=.data[[feat1]], y=.data[[feat2]])) +
+    ggplot(df, aes(x=.data[[feat1]], y=.data[[feat2]])) +
+      geom_point(aes(color=disease_stage)) +
       ggtitle(sprintf("Gene expression: %s vs. %s", feat2, feat1)) +
+      facet_wrap(~experiment, scales='free') + 
       xlab(feat1) +
       ylab(feat2)
-
-    if (input$coex_gene_color != "none") {
-      plt <- plt + geom_point(aes(color=.data[[input$coex_gene_color]]))
-    } else {
-      plt <- plt + geom_point()
-    }
-
-    plt
   })
 
   ##########

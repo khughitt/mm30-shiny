@@ -180,10 +180,7 @@ ui <- function(request) {
               width=3,
               fluidRow(
                 selectizeInput("coex_gene1", "Gene A:", choices=gene_coex_opts, selected=gene_coex_opts[1]),
-                selectizeInput("coex_gene2", "Gene B:", choices=gene_coex_opts, selected=gene_coex_opts[2]),
-                selectInput("coex_gene_color", "Color:", 
-                            c("None"="none", "Experiment"="experiment", "Disease stage"="disease_stage"),
-                            selected="none")
+                selectizeInput("coex_gene2", "Gene B:", choices=gene_coex_opts, selected=gene_coex_opts[2])
               ),
             ),
             column(
