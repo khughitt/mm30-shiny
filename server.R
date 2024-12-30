@@ -421,10 +421,29 @@ server <- function(input, output, session) {
       t() %>%
       as.data.frame() %>%
       rownames_to_column("sample_id") %>%
-      left_join(sample_mdata, by="sample_id")
+      left_join(sample_mdata, by="sample_id") %>%
+      select(-platform_id, -platform_type)
+
 
     df$disease_stage[is.na(df$disease_stage)] <- "Unknown"
-    df[complete.cases(df), ]
+    df <- df[complete.cases(df), ]
+
+    # compute linear model r^2 for each dataset and adjust experiment field so that
+    # it is included in the plot titles
+    for (expt_id in unique(df$experiment)) {
+      expt_df <- df %>%
+        filter(experiment == expt_id)
+
+      fit <- summary(lm(expr(!!sym(feat1) ~ !!sym(feat2)), data=expt_df))
+
+      r2 <- fit$r.squared
+      pval <- fit$coefficients[2, 'Pr(>|t|)']
+
+      expt_label <- sprintf("%s (R^2: %0.2f, p-val: %0.2f)", expt_id, r2, pval)
+      df$experiment[df$experiment == expt_id] <- expt_label
+    }
+
+    df
   })
 
   output$gene_coex_plot <- renderPlot({
@@ -435,6 +454,7 @@ server <- function(input, output, session) {
 
     ggplot(df, aes(x=.data[[feat1]], y=.data[[feat2]])) +
       geom_point(aes(color=disease_stage)) +
+      geom_smooth(method='lm') +
       ggtitle(sprintf("Gene expression: %s vs. %s", feat2, feat1)) +
       facet_wrap(~experiment, scales='free') + 
       xlab(feat1) +
