@@ -185,7 +185,26 @@ ui <- function(request) {
             ),
             column(
               width=9,
-              withSpinner(plotOutput("gene_coex_plot", width="1200px", height="1000px"))
+              withSpinner(plotOutput("gene_coex_plot", width="1200px", height="1200px"))
+            )
+          )
+        ),
+        #---------------------------------------
+        # co-expression > gene sets
+        #---------------------------------------
+        conditionalPanel(
+          condition = "input.coex_feat_type == 'gene_sets'",
+          fluidRow(
+            column(
+              width=3,
+              fluidRow(
+                selectizeInput("coex_gene_set1", "Gene Set A:", choices=gene_set_coex_opts, selected=gene_set_coex_opts[1]),
+                selectizeInput("coex_gene_set2", "Gene Set B:", choices=gene_set_coex_opts, selected=gene_set_coex_opts[2])
+              ),
+            ),
+            column(
+              width=9,
+              withSpinner(plotOutput("gene_set_coex_plot", width="1200px", height="1000px"))
             )
           )
         )
