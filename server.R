@@ -56,7 +56,7 @@ server <- function(input, output, session) {
     surv_os_gene_details()
   }, digits=-3)
 
-  output$surv_os_gene_tcga_tbl <- output$stage_gene_tcga_tbl <- renderTable({
+  output$surv_os_gene_tcga_tbl <- output$stage_gene_tcga_tbl <- output$treatment_gene_tcga_tbl <- renderTable({
     # rv$tcga_tbl
     tcga_associations_tbl()
   }, digits=4)
@@ -408,6 +408,121 @@ server <- function(input, output, session) {
       facet_wrap(~dataset, ncol=3, scales='free')
   })
 
+  ############################################################ 
+  # Treatment response
+  ############################################################ 
+
+  #---------------------------------------
+  # Treatment response > genes
+  #---------------------------------------
+  treatment_datasets <- covariate_mdata %>% 
+    filter(phenotype=='treatment_response') %>% 
+    pull(dataset) %>%
+    sort(TRUE)
+
+  treatment_gene_selected <- reactive({
+    treatment_gene_scores$symbol[input$treatment_gene_scores_tbl_rows_selected]
+  })
+
+  output$treatment_gene_scores_tbl <- renderDT({
+    df <- treatment_gene_scores %>%
+      select(Gene=symbol, Rank, `P-value\n(metap)`=sumz_wt_pval, 
+             `P-value\n(metafor)`=metafor_pval, Description=description,
+             CHR=chr_region, `Cell Cycle`=cell_cycle_phase, `DGIdb\ncategories`=dgidb_categories)
+
+    DT::datatable(df, style="bootstrap", escape=FALSE,  rownames=FALSE,
+                  selection=selectOpts, options=tableOpts) %>%
+      formatSignif(columns=c("P-value\n(metap)", "P-value\n(metafor)"), digits=3)
+  })
+
+  treatment_gene_details <- reactive({
+    req(input$treatment_gene_scores_tbl_rows_selected)
+
+    gene <- treatment_gene_selected()
+
+    df <- bind_rows(
+      treatment_gene_pvals %>%
+        filter(symbol == gene),
+      treatment_gene_effects %>%
+        filter(symbol == gene),
+      treatment_gene_errors %>%
+        filter(symbol == gene)
+    )
+
+    df %>%
+      select(-symbol) %>%
+      t() %>%
+      as.data.frame() %>%
+      setNames(c("P-value", "Effect", "Std. Error")) %>%
+      rownames_to_column("Dataset") %>%
+      mutate(Dataset=str_replace(Dataset, '_treatment_response', ''))
+  })
+
+  output$treatment_gene_details_tbl <- renderTable({
+    treatment_gene_details()
+  }, digits=-3)
+
+  output$treatment_gene_plot <- renderPlotly({
+    req(input$treatment_gene_scores_tbl_rows_selected)
+
+    plts <- list()
+
+    # treatment plot titles
+    plot_titles <- list(
+      GSE9782 = "Treatment Response (VTD)",
+      GSE68871 = "Treatment Response (VTD)",
+      GSE39754 = "Treatment Response (VAD + ACST)"
+    )
+
+    gene_name <- treatment_gene_selected()
+
+    for (acc in treatment_datasets) {
+
+      df <- indiv_mdata[[acc]] %>%
+        select(1, response=treatment_response)
+
+      sample_ids <- df %>%
+        pull(1)
+
+      feat_expr <- as.numeric(gene_expr[gene_name, sample_ids])
+
+      df$feature <- feat_expr 
+
+      if (sum(!is.na(feat_expr)) > 0) {
+        log_info(acc)
+        plts[[acc]] <- plot_categorical(df, acc, plot_titles[[acc]], gene_name, cfg$colors)
+      }
+    }
+
+    # MMRF plots
+    df <- indiv_mdata[["MMRF"]] %>%
+      select(1, response=response_bor_len_dex)
+
+    sample_ids <- df %>%
+      pull(1)
+
+    df$feature <- as.numeric(gene_expr[gene_name, sample_ids]) 
+
+    if (sum(!is.na(df$feature)) > 0) {
+      plts[["mmrf1"]] <- plot_categorical(df, "MMRF", "Treatment Response (Bor-Len-Dex)", gene_name, cfg$colors)
+    }
+
+    df <- indiv_mdata[["MMRF"]] %>%
+      select(1, response=response_bor_cyc_dex)
+
+    sample_ids <- df %>%
+      pull(1)
+
+    df$feature <- as.numeric(gene_expr[gene_name, sample_ids]) 
+
+    if (sum(!is.na(df$feature)) > 0) {
+      plts[["mmrf2"]] <- plot_categorical(df, "MMRF", "Treatment Response (Bor-Cyc-Dex)", gene_name, cfg$colors)
+    }
+
+    # "plotly::" namespace necessary or else Hmisc::plotly may be used...
+    do.call(plotly::subplot, c(plts, list(nrows=2)))
+  })
+
   ##########
   #
   # Co-expression
@@ -439,7 +554,7 @@ server <- function(input, output, session) {
       r2 <- fit$r.squared
       pval <- fit$coefficients[2, 'Pr(>|t|)']
 
-      expt_label <- sprintf("%s (R^2: %0.2f, p-val: %0.2f)", expt_id, r2, pval)
+      expt_label <- sprintf("%s (R^2 %0.2f)", expt_id, r2, pval)
       df$experiment[df$experiment == expt_id] <- expt_label
     }
 
@@ -487,7 +602,7 @@ server <- function(input, output, session) {
       r2 <- fit$r.squared
       pval <- fit$coefficients[2, 'Pr(>|t|)']
 
-      expt_label <- sprintf("%s (R^2: %0.2f, p-val: %0.2f)", expt_id, r2, pval)
+      expt_label <- sprintf("%s (R^2 %0.2f)", expt_id, r2, pval)
       df$experiment[df$experiment == expt_id] <- expt_label
     }
 

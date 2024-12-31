@@ -162,6 +162,48 @@ ui <- function(request) {
         ),
       ),
       ######################################## 
+      # Treatment
+      ######################################## 
+      tabPanel(
+        "Treatment",
+        fluidRow(
+          selectInput("treatment_feat_type", "Genes / Gene sets:", 
+                      c("Genes"="genes", "Gene sets"="gene_sets"))
+        ),
+        #---------------------------------------
+        # Treatment > genes
+        #---------------------------------------
+        conditionalPanel(
+          condition = "input.treatment_feat_type == 'genes'",
+          fluidRow(
+            column(
+              width=6,
+              withSpinner(DTOutput("treatment_gene_scores_tbl"))
+            ),
+            column(
+              width=6,
+              fluidRow(
+                column(
+                  width=3, 
+                  uiOutput("treatment_gene_summary_html"),
+                )
+              ),
+              withSpinner(plotlyOutput("treatment_gene_plot", height="800px")),
+              withSpinner(
+                tagList(
+                  tags$hr(),
+                  tags$h3("Treatment association test results:"),
+                  tableOutput("treatment_gene_details_tbl"),
+                  tags$hr(),
+                  tags$h3("TCGA survival associations:"),
+                  tableOutput("treatment_gene_tcga_tbl")
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      ######################################## 
       # Co-expression
       ######################################## 
       tabPanel(

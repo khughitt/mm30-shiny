@@ -204,6 +204,37 @@ stage_gene_set_scaled_expr <- read_feather(file.path(results_dir, "disease_stage
   filter(!stage %in% c('early', 'late', 'pre_relapsed'))
 
 #--------------------------------
+# x. Treatment
+#--------------------------------
+treatment_gene_scores <- read_feather(file.path(results_dir, "scores/combined/treatment_response/gene.feather")) %>%
+    left_join(gene_mdata, by='symbol') %>%
+    filter(num_missing <= cfg$max_missing$treatment_response) %>%
+    select(symbol, sumz_wt_pval, metafor_pval, description,
+           chr_region, cell_cycle_phase, dgidb_categories) %>%
+    arrange(sumz_wt_pval) %>%
+    mutate(Rank=dense_rank(sumz_wt_pval)) %>%
+    select(Rank, everything())
+
+treatment_gene_pvals   <- read_feather(file.path(results_dir, "associations/treatment_response/gene/pvals.feather"))
+treatment_gene_errors  <- read_feather(file.path(results_dir, "associations/treatment_response/gene/errors.feather"))
+treatment_gene_effects <- read_feather(file.path(results_dir, "associations/treatment_response/gene/effects.feather"))
+
+treatment_gene_set_scores <- read_feather(file.path(results_dir, "scores/combined/treatment_response/gene_set.feather")) %>%
+    left_join(gene_set_mdata, by='gene_set') %>%
+    filter(num_missing <= cfg$max_missing$treatment_response) %>%
+    select(gene_set, sumz_wt_pval, 
+           `P-value\n(metafor)`=metafor_pval, Collection=collection, 
+           `# Genes`=collection_size) %>%
+    arrange(sumz_wt_pval) %>%
+    mutate(Rank=dense_rank(sumz_wt_pval)) %>%
+    rename(`P-value\n(metap)`=sumz_wt_pval) %>%
+    select(Rank, everything())
+
+treatment_gene_set_pvals   <- read_feather(file.path(results_dir, "associations/treatment_response/gene_set/pvals.feather"))
+treatment_gene_set_errors  <- read_feather(file.path(results_dir, "associations/treatment_response/gene_set/errors.feather"))
+treatment_gene_set_effects <- read_feather(file.path(results_dir, "associations/treatment_response/gene_set/effects.feather"))
+
+#--------------------------------
 # x. Combined expr
 #--------------------------------
 gene_expr <- read_feather(file.path(results_dir, "expr/gene/expr-scaled-full.feather")) %>%
