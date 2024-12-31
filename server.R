@@ -4,15 +4,15 @@
 server <- function(input, output, session) {
   log_info("shiny::server()")
 
-  ############################################################ 
+  ############################################################
   # Overall survival
-  ############################################################ 
+  ############################################################
 
   #---------------------------------------
   # Overall survival > genes
   #---------------------------------------
-  surv_os_datasets <- covariate_mdata %>% 
-    filter(phenotype=='overall_survival') %>% 
+  surv_os_datasets <- covariate_mdata %>%
+    filter(phenotype=='overall_survival') %>%
     pull(dataset) %>%
     sort(TRUE)
 
@@ -63,7 +63,7 @@ server <- function(input, output, session) {
 
   output$surv_os_gene_scores_tbl <- renderDT({
     df <- surv_os_gene_scores %>%
-      select(Gene=symbol, Rank, `P-value\n(metap)`=sumz_wt_pval, 
+      select(Gene=symbol, Rank, `P-value\n(metap)`=sumz_wt_pval,
              `P-value\n(metafor)`=metafor_pval, Description=description,
              CHR=chr_region, `Cell Cycle`=cell_cycle_phase, `DGIdb\ncategories`=dgidb_categories)
 
@@ -88,7 +88,7 @@ server <- function(input, output, session) {
       gene_name <- surv_os_gene_selected()
       feat_expr <- as.numeric(gene_expr[gene_name, sample_ids])
 
-      df$feature <- feat_expr 
+      df$feature <- feat_expr
 
       time_units <- "Days"
 
@@ -152,8 +152,8 @@ server <- function(input, output, session) {
 
     surv_os_gene_scores %>%
       filter(symbol %in% genes) %>%
-      select(Gene=symbol, `Rank (OS)`=Rank, `P-value\n(metap)`=sumz_wt_pval, `P-value (metafor)`=metafor_pval, 
-             Description=description, CHR=chr_region, `Cell Cycle`=cell_cycle_phase, 
+      select(Gene=symbol, `Rank (OS)`=Rank, `P-value\n(metap)`=sumz_wt_pval, `P-value (metafor)`=metafor_pval,
+             Description=description, CHR=chr_region, `Cell Cycle`=cell_cycle_phase,
              `DGIdb\ncategories`=dgidb_categories)
 
   }, digits=4)
@@ -181,7 +181,7 @@ server <- function(input, output, session) {
 
       feat_expr <- as.numeric(gene_set_expr[selected_gene_set, sample_ids])
 
-      df$feature <- feat_expr 
+      df$feature <- feat_expr
 
       time_units <- "Days"
 
@@ -198,11 +198,11 @@ server <- function(input, output, session) {
                         title=sprintf("Overall survival (%s)", selected_gene_set))
   })
 
-  ############################################################ 
+  ############################################################
   # Disease Stage
-  ############################################################ 
-  stage_datasets <- covariate_mdata %>% 
-    filter(phenotype=='disease_stage') %>% 
+  ############################################################
+  stage_datasets <- covariate_mdata %>%
+    filter(phenotype=='disease_stage') %>%
     pull(dataset) %>%
     sort(TRUE)
 
@@ -264,15 +264,15 @@ server <- function(input, output, session) {
       req(!is.null(selectedGene()))
       gene <- selectedGene()
 
-      all_rank <- gene_scores_all %>% 
+      all_rank <- gene_scores_all %>%
         filter(symbol == gene) %>%
         pull(Rank)
 
-      surv_os_rank <- surv_os_gene_scores %>% 
+      surv_os_rank <- surv_os_gene_scores %>%
         filter(symbol == gene) %>%
         pull(Rank)
 
-      surv_pfs_rank <- surv_pfs_gene_scores %>% 
+      surv_pfs_rank <- surv_pfs_gene_scores %>%
         filter(symbol == gene) %>%
         pull(Rank)
 
@@ -281,9 +281,9 @@ server <- function(input, output, session) {
         br(),
         tags$h4("MM30 Rankings:"),
         br(),
-        HTML(sprintf("All: <b>%d</b>",  all_rank)), 
+        HTML(sprintf("All: <b>%d</b>",  all_rank)),
         br(),
-        HTML(sprintf("Overall Survival (OS): <b>%d</b>", surv_os_rank)), 
+        HTML(sprintf("Overall Survival (OS): <b>%d</b>", surv_os_rank)),
         br(),
         HTML(sprintf("Progression-free Survival (PFS): <b>%d</b>", surv_pfs_rank))
       )
@@ -293,15 +293,15 @@ server <- function(input, output, session) {
       req(!is.null(selectedGeneSet()))
       selected_gene_set <- selectedGeneSet()
 
-      all_rank <- gene_set_scores_all %>% 
+      all_rank <- gene_set_scores_all %>%
         filter(gene_set == selected_gene_set) %>%
         pull(Rank)
 
-      surv_os_rank <- surv_os_gene_set_scores %>% 
+      surv_os_rank <- surv_os_gene_set_scores %>%
         filter(gene_set == selected_gene_set) %>%
         pull(Rank)
 
-      surv_pfs_rank <- surv_pfs_gene_set_scores %>% 
+      surv_pfs_rank <- surv_pfs_gene_set_scores %>%
         filter(gene_set == selected_gene_set) %>%
         pull(Rank)
 
@@ -323,9 +323,9 @@ server <- function(input, output, session) {
         tags$a(url, target="_blank", href=url),
         tags$h4("MM30 Rankings:"),
         br(),
-        HTML(sprintf("All: <b>%d</b>",  all_rank)), 
+        HTML(sprintf("All: <b>%d</b>",  all_rank)),
         br(),
-        HTML(sprintf("Overall Survival (OS): <b>%d</b>", surv_os_rank)), 
+        HTML(sprintf("Overall Survival (OS): <b>%d</b>", surv_os_rank)),
         br(),
         HTML(sprintf("Progression-free Survival (PFS): <b>%d</b>", surv_pfs_rank))
       )
@@ -352,15 +352,15 @@ server <- function(input, output, session) {
 
     stage_gene_scores %>%
       filter(symbol %in% genes) %>%
-      select(Gene=symbol, `Rank (OS)`=Rank, `P-value\n(metap)`=sumz_wt_pval, `P-value (metafor)`=metafor_pval, 
-             Description=description, CHR=chr_region, `Cell Cycle`=cell_cycle_phase, 
+      select(Gene=symbol, `Rank (OS)`=Rank, `P-value\n(metap)`=sumz_wt_pval, `P-value (metafor)`=metafor_pval,
+             Description=description, CHR=chr_region, `Cell Cycle`=cell_cycle_phase,
              `DGIdb\ncategories`=dgidb_categories)
 
   }, digits=4)
 
   output$stage_gene_scores_tbl <- renderDT({
     df <- stage_gene_scores %>%
-      select(Gene=symbol, Rank, `P-value\n(metap)`=sumz_wt_pval, 
+      select(Gene=symbol, Rank, `P-value\n(metap)`=sumz_wt_pval,
              `P-value\n(metafor)`=metafor_pval, Description=description,
              CHR=chr_region, `Cell Cycle`=cell_cycle_phase, `DGIdb\ncategories`=dgidb_categories)
 
@@ -408,15 +408,15 @@ server <- function(input, output, session) {
       facet_wrap(~dataset, ncol=3, scales='free')
   })
 
-  ############################################################ 
+  ############################################################
   # Treatment response
-  ############################################################ 
+  ############################################################
 
   #---------------------------------------
   # Treatment response > genes
   #---------------------------------------
-  treatment_datasets <- covariate_mdata %>% 
-    filter(phenotype=='treatment_response') %>% 
+  treatment_datasets <- covariate_mdata %>%
+    filter(phenotype=='treatment_response') %>%
     pull(dataset) %>%
     sort(TRUE)
 
@@ -426,7 +426,7 @@ server <- function(input, output, session) {
 
   output$treatment_gene_scores_tbl <- renderDT({
     df <- treatment_gene_scores %>%
-      select(Gene=symbol, Rank, `P-value\n(metap)`=sumz_wt_pval, 
+      select(Gene=symbol, Rank, `P-value\n(metap)`=sumz_wt_pval,
              `P-value\n(metafor)`=metafor_pval, Description=description,
              CHR=chr_region, `Cell Cycle`=cell_cycle_phase, `DGIdb\ncategories`=dgidb_categories)
 
@@ -486,7 +486,7 @@ server <- function(input, output, session) {
 
       feat_expr <- as.numeric(gene_expr[gene_name, sample_ids])
 
-      df$feature <- feat_expr 
+      df$feature <- feat_expr
 
       if (sum(!is.na(feat_expr)) > 0) {
         log_info(acc)
@@ -501,7 +501,7 @@ server <- function(input, output, session) {
     sample_ids <- df %>%
       pull(1)
 
-    df$feature <- as.numeric(gene_expr[gene_name, sample_ids]) 
+    df$feature <- as.numeric(gene_expr[gene_name, sample_ids])
 
     if (sum(!is.na(df$feature)) > 0) {
       plts[["mmrf1"]] <- plot_categorical(df, "MMRF", "Treatment Response (Bor-Len-Dex)", gene_name, cfg$colors)
@@ -513,7 +513,7 @@ server <- function(input, output, session) {
     sample_ids <- df %>%
       pull(1)
 
-    df$feature <- as.numeric(gene_expr[gene_name, sample_ids]) 
+    df$feature <- as.numeric(gene_expr[gene_name, sample_ids])
 
     if (sum(!is.na(df$feature)) > 0) {
       plts[["mmrf2"]] <- plot_categorical(df, "MMRF", "Treatment Response (Bor-Cyc-Dex)", gene_name, cfg$colors)
@@ -571,7 +571,7 @@ server <- function(input, output, session) {
       geom_point(aes(color=disease_stage)) +
       geom_smooth(method='lm') +
       ggtitle(sprintf("Gene expression: %s vs. %s", feat2, feat1)) +
-      facet_wrap(~experiment, scales='free') + 
+      facet_wrap(~experiment, scales='free') +
       xlab(feat1) +
       ylab(feat2)
   })
@@ -619,7 +619,7 @@ server <- function(input, output, session) {
       geom_point(aes(color=disease_stage)) +
       geom_smooth(method='lm') +
       ggtitle(sprintf("Gene set expression: %s vs. %s", feat2, feat1)) +
-      facet_wrap(~experiment, scales='free') + 
+      facet_wrap(~experiment, scales='free') +
       xlab(feat1) +
       ylab(feat2)
   })
@@ -674,6 +674,48 @@ server <- function(input, output, session) {
   })
   observeEvent(input$stage_gene_set_scores_tbl_rows_selected, {
     selectedGeneSet(stage_gene_set_selected())
+  })
+
+  ###################################
+  #
+  # Datasets
+  #
+  ###################################
+  output$datasets_tbl <- renderDT({
+    df <- dataset_mdata %>%
+      select(dataset, title, num_samples)
+
+    DT::datatable(df, style="bootstrap", escape=FALSE,  rownames=FALSE, selection=selectOpts,
+                  options=tableOpts)
+  })
+
+  output$dataset_summary <- renderUI({
+    acc <- dataset_mdata$dataset[input$datasets_tbl_rows_selected]
+
+    mdat <- dataset_mdata %>%
+      filter(dataset==acc)  %>%
+      as.list()
+
+    tagList(
+      tags$h2(mdat$title),
+      br(),
+      tags$a(acc, target="_blank", href=mdat$urls),
+      br(),
+      HTML(mdat$name),
+      br(),
+      HTML(sprintf("Submitted: %s", mdat$submission_date)),
+      br(),
+      HTML(sprintf("# samples: <b>%d</b>",  mdat$num_samples)),
+      br(),
+      HTML(sprintf("Covariates: <b>%s</b>",  mdat$covariates)),
+      br(),
+      tags$h4("Abstract:"),
+      HTML(mdat$abstract),
+      br(),
+      tags$h4("Overall design:"),
+      HTML(mdat$overall_design),
+      br()
+    )
   })
 
   # bookmarking support

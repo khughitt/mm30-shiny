@@ -277,6 +277,27 @@ ui <- function(request) {
         ),
       ),
       ######################################## 
+      # Datasets
+      ######################################## 
+      tabPanel(
+        "Datasets",
+        fluidRow(
+          column(
+              width=6,
+              withSpinner(DTOutput("datasets_tbl"))
+          ),
+          column(
+            width=6,
+            fluidRow(
+              column(
+                width=6, 
+                uiOutput("dataset_summary"),
+              )
+            ),
+          ),
+        )
+      ),
+      ######################################## 
       # Settings
       ######################################## 
       # tabPanel(

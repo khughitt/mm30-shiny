@@ -67,7 +67,29 @@ gene_set_mdata <- read_feather(file.path(results_dir, "metadata/gene_sets.feathe
 
 sample_mdata <- read_feather(file.path(results_dir, "metadata/samples.feather"))
 
+sample_counts <- sample_mdata %>% 
+  group_by(experiment) %>% 
+  summarize(num_samples=n()) %>%
+  rename(dataset=experiment)
+
+dataset_platforms <- sample_mdata %>% 
+  group_by(experiment) %>% 
+  slice(1) %>% 
+  select(dataset=experiment, platform_type)
+
 covariate_mdata <- read_feather(file.path(results_dir, "metadata/covariates.feather"))
+
+dataset_covariates <- covariate_mdata %>%
+  select(dataset, category) %>%
+  distinct() %>%
+  group_by(dataset) %>%
+  summarise(covariates=paste(category, collapse=", "))
+
+dataset_mdata <- read_feather(file.path(results_dir, "metadata/datasets.feather")) %>%
+  left_join(sample_counts, by='dataset') %>%
+  left_join(dataset_platforms, by='dataset') %>%
+  left_join(dataset_covariates, by='dataset') %>%
+  arrange(-num_samples)
 
 # create a list of sample metadata dataframes for each dataset
 indiv_mdata <- list()
