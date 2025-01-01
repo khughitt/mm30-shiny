@@ -468,13 +468,15 @@ server <- function(input, output, session) {
     plts <- list()
 
     # treatment plot titles
-    plot_titles <- list(
-      GSE9782 = "Treatment Response (VTD)",
-      GSE68871 = "Treatment Response (VTD)",
-      GSE39754 = "Treatment Response (VAD + ACST)"
+    geo_titles <- list(
+      GSE9782="VTD",
+      GSE68871="VTD",
+      GSE39754="VAD + ACST"
     )
 
     gene_name <- treatment_gene_selected()
+
+    plt_titles <- c()
 
     for (acc in treatment_datasets) {
 
@@ -489,8 +491,22 @@ server <- function(input, output, session) {
       df$feature <- feat_expr
 
       if (sum(!is.na(feat_expr)) > 0) {
-        log_info(acc)
-        plts[[acc]] <- plot_categorical(df, acc, plot_titles[[acc]], gene_name, cfg$colors)
+        plts[[acc]] <- plot_categorical(df, acc, "", gene_name, cfg$colors) %>%
+          add_annotations(
+            text=geo_titles[[acc]],
+            font=list(size=15),
+            x=0.1,
+            y=1,
+            xref="paper",
+            yref="paper",
+            xanchor="left",
+            yanchor="top",
+            showarrow=FALSE
+          ) %>%
+          layout(
+            xaxis=list(tickfont=list(size=13)), 
+            yaxis=list(tickfont=list(size=13))
+          )
       }
     }
 
@@ -498,29 +514,62 @@ server <- function(input, output, session) {
     df <- indiv_mdata[["MMRF"]] %>%
       select(1, response=response_bor_len_dex)
 
-    sample_ids <- df %>%
-      pull(1)
-
+    sample_ids <- pull(df, 1)
     df$feature <- as.numeric(gene_expr[gene_name, sample_ids])
 
     if (sum(!is.na(df$feature)) > 0) {
-      plts[["mmrf1"]] <- plot_categorical(df, "MMRF", "Treatment Response (Bor-Len-Dex)", gene_name, cfg$colors)
+      plts[["mmrf1"]] <- plot_categorical(df, "MMRF", "", gene_name, cfg$colors) %>%
+        add_annotations(
+          text="Bor-Len-Dex",
+          font=list(size=15),
+          x=0.1,
+          y=1,
+          xref="paper",
+          yref="paper",
+          xanchor="left",
+          yanchor="top",
+          showarrow=FALSE
+        ) %>%
+        layout(
+          font=list(size=15),
+          xaxis=list(tickfont=list(size=13)), 
+          yaxis=list(tickfont=list(size=13))
+        )
     }
 
     df <- indiv_mdata[["MMRF"]] %>%
       select(1, response=response_bor_cyc_dex)
 
-    sample_ids <- df %>%
-      pull(1)
-
+    sample_ids <- pull(df, 1)
     df$feature <- as.numeric(gene_expr[gene_name, sample_ids])
 
     if (sum(!is.na(df$feature)) > 0) {
-      plts[["mmrf2"]] <- plot_categorical(df, "MMRF", "Treatment Response (Bor-Cyc-Dex)", gene_name, cfg$colors)
+      plts[["mmrf2"]] <- plot_categorical(df, "MMRF", "", gene_name, cfg$colors) %>%
+        add_annotations(
+          text="Bor-Cyc-Dex",
+          font=list(size=15),
+          x=0.1,
+          y=1,
+          xref="paper",
+          yref="paper",
+          xanchor="left",
+          yanchor="top",
+          showarrow=FALSE
+        ) %>%
+        layout(
+          xaxis=list(tickfont=list(size=13)), 
+          yaxis=list(tickfont=list(size=13))
+        )
     }
 
-    # "plotly::" namespace necessary or else Hmisc::plotly may be used...
-    do.call(plotly::subplot, c(plts, list(nrows=2)))
+    do.call(plotly::subplot, c(plts, list(nrows=2, margin=0.06))) %>%
+      layout(
+        title=list(
+          text=sprintf("Treatment response (%s)", gene_name),
+          font=list(size=17)
+        )
+      )%>%
+      style(showlegend=FALSE)
   })
 
   ##########
