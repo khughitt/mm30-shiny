@@ -9,6 +9,7 @@ library(ggpubr)
 library(heatmaply)
 library(Hmisc)
 library(logger)
+library(NMF)
 library(plotly)
 library(shiny)
 library(shinythemes)
@@ -17,6 +18,7 @@ library(shinyWidgets)
 library(survminer)
 library(svglite)
 library(tidyverse)
+library(viridis)
 library(yaml)
 
 source("R/plotting.R")
@@ -26,17 +28,17 @@ source("R/plotting.R")
 #############################
 options(spinner.color="#00bc8c")
 options(scipen=2, digits=3)
-set.seed(1)
-
-enableBookmarking("url")
 
 #log_threshold(DEBUG)
 log_info("Initializing MM30 shiny app..")
 
+cfg <- read_yaml("config/config-v7.3.yml")
+set.seed(cfg$random_seed)
+
+enableBookmarking("url")
+
 tableOpts  <- list(pageLength=20, scrollX=TRUE)
 selectOpts <- list(target="row", mode="single", selected=1)
-
-cfg <- read_yaml("config/config-v7.3.yml")
 
 # ordered vector of disease stages
 # disease_stages <- c("Healthy", "MGUS", "SMM", "MM", "RRMM")
@@ -65,19 +67,15 @@ gene_mdata <- read_feather(file.path(results_dir, "metadata/genes.feather")) %>%
 gene_set_mdata <- read_feather(file.path(results_dir, "metadata/gene_sets.feather")) %>%
   mutate(collection_size=lengths(genes))
 
-sample_mdata <- read_feather(file.path(results_dir, "metadata/samples.feather"))
-
-sample_counts <- sample_mdata %>% 
-  group_by(experiment) %>% 
-  summarize(num_samples=n()) %>%
+sample_mdata <- read_feather(file.path(results_dir, "metadata/samples.feather")) %>%
   rename(dataset=experiment)
 
-dataset_platforms <- sample_mdata %>% 
-  group_by(experiment) %>% 
-  slice(1) %>% 
-  select(dataset=experiment, platform_type)
+sample_counts <- sample_mdata %>%
+  group_by(dataset) %>%
+  summarize(num_samples=n())
 
-covariate_mdata <- read_feather(file.path(results_dir, "metadata/covariates.feather"))
+covariate_mdata <- read_feather(file.path(results_dir, "metadata/covariates.feather")) %>%
+  rename(dataset=accession)
 
 dataset_covariates <- covariate_mdata %>%
   select(dataset, category) %>%
@@ -86,10 +84,13 @@ dataset_covariates <- covariate_mdata %>%
   summarise(covariates=paste(category, collapse=", "))
 
 dataset_mdata <- read_feather(file.path(results_dir, "metadata/datasets.feather")) %>%
+  rename(dataset=accession, title=geo_title) %>%
+  select(-num_samples) %>%
   left_join(sample_counts, by='dataset') %>%
-  left_join(dataset_platforms, by='dataset') %>%
   left_join(dataset_covariates, by='dataset') %>%
   arrange(-num_samples)
+
+dataset_mdata$title[dataset_mdata$dataset == "MMRF"] <- "MMRF CoMMpaSS Trial"
 
 # create a list of sample metadata dataframes for each dataset
 indiv_mdata <- list()
@@ -98,7 +99,7 @@ indiv_mdata <- list()
 infile <- file.path(mmrf_dir, "clinical_flat_files", "MMRF_CoMMpass_IA22_combined_metadata.feather")
 
 mmrf_mdata <- read_feather(infile) %>%
-      select(public_id, iss_stage, ecog, mm_status, fresp, frespcd, 
+      select(public_id, iss_stage, ecog, mm_status, fresp, frespcd,
               trtshnm, pfs_time, pfs_censor, os_time, os_censor)
 
 mmrf_mdata$frespcd <- ordered(mmrf_mdata$frespcd, c("sCR", "CR", "VGPR", "PR"))
@@ -134,7 +135,7 @@ gene_set_scores_all$Rank <- 1:nrow(gene_set_scores_all)
 #--------------------------------
 surv_os_gene_scores <- read_feather(file.path(results_dir, "scores/combined/survival_os/gene.feather")) %>%
     left_join(gene_mdata, by='symbol') %>%
-    filter(num_missing <= cfg$max_missing$surv_os) %>%
+    filter(num_missing <= cfg$scores_max_missing_datasets$surv_os) %>%
     select(symbol, sumz_wt_pval, metafor_pval, description,
            chr_region, cell_cycle_phase, dgidb_categories) %>%
     arrange(sumz_wt_pval) %>%
@@ -147,9 +148,9 @@ surv_os_gene_effects <- read_feather(file.path(results_dir, "associations/surviv
 
 surv_os_gene_set_scores <- read_feather(file.path(results_dir, "scores/combined/survival_os/gene_set.feather")) %>%
     left_join(gene_set_mdata, by='gene_set') %>%
-    filter(num_missing <= cfg$max_missing$surv_os) %>%
-    select(gene_set, sumz_wt_pval, 
-           `P-value\n(metafor)`=metafor_pval, Collection=collection, 
+    filter(num_missing <= cfg$scores_max_missing_datasets$surv_os) %>%
+    select(gene_set, sumz_wt_pval,
+           `P-value\n(metafor)`=metafor_pval, Collection=collection,
            `# Genes`=collection_size) %>%
     arrange(sumz_wt_pval) %>%
     mutate(Rank=dense_rank(sumz_wt_pval)) %>%
@@ -161,11 +162,11 @@ surv_os_gene_set_errors  <- read_feather(file.path(results_dir, "associations/su
 surv_os_gene_set_effects <- read_feather(file.path(results_dir, "associations/survival_os/gene_set/effects.feather"))
 
 #--------------------------------
-# 4. Progression free survival 
+# 4. Progression free survival
 #--------------------------------
 surv_pfs_gene_scores <- read_feather(file.path(results_dir, "scores/combined/survival_pfs/gene.feather")) %>%
     left_join(gene_mdata, by='symbol') %>%
-    filter(num_missing <= cfg$max_missing$surv_pfs) %>%
+    filter(num_missing <= cfg$scores_max_missing_datasets$surv_pfs) %>%
     select(symbol, sumz_wt_pval, `P-value\n(metafor)`=metafor_pval, Description=description,
            CHR=chr_region, `Cell Cycle`=cell_cycle_phase, `DGIdb\ncategories`=dgidb_categories) %>%
     arrange(sumz_wt_pval) %>%
@@ -175,9 +176,9 @@ surv_pfs_gene_scores <- read_feather(file.path(results_dir, "scores/combined/sur
 
 surv_pfs_gene_set_scores <- read_feather(file.path(results_dir, "scores/combined/survival_pfs/gene_set.feather")) %>%
     left_join(gene_set_mdata, by='gene_set') %>%
-    filter(num_missing <= cfg$max_missing$surv_pfs) %>%
-    select(gene_set, sumz_wt_pval, 
-           `P-value\n(metafor)`=metafor_pval, Collection=collection, 
+    filter(num_missing <= cfg$scores_max_missing_datasets$surv_pfs) %>%
+    select(gene_set, sumz_wt_pval,
+           `P-value\n(metafor)`=metafor_pval, Collection=collection,
            `# Genes`=collection_size) %>%
     arrange(sumz_wt_pval) %>%
     mutate(Rank=dense_rank(sumz_wt_pval)) %>%
@@ -193,7 +194,7 @@ surv_pfs_gene_set_effects <- read_feather(file.path(results_dir, "associations/s
 #--------------------------------
 stage_gene_scores <- read_feather(file.path(results_dir, "scores/combined/disease_stage/gene.feather")) %>%
     left_join(gene_mdata, by='symbol') %>%
-    filter(num_missing <= cfg$max_missing$disease_stage) %>%
+    filter(num_missing <= cfg$scores_max_missing_datasets$disease_stage) %>%
     select(symbol, sumz_wt_pval, metafor_pval, description,
            chr_region, cell_cycle_phase, dgidb_categories) %>%
     arrange(sumz_wt_pval) %>%
@@ -207,11 +208,14 @@ stage_gene_effects <- read_feather(file.path(results_dir, "associations/disease_
 stage_gene_scaled_expr <- read_feather(file.path(results_dir, "disease_stage/scaled/gene", "combined.feather")) %>%
   filter(!stage %in% c('early', 'late', 'pre_relapsed'))
 
+ind <- match(stage_gene_scaled_expr$dataset, dataset_mdata$dataset)
+stage_gene_scaled_expr$dataset_name <- dataset_mdata$name[ind]
+
 stage_gene_set_scores <- read_feather(file.path(results_dir, "scores/combined/disease_stage/gene_set.feather")) %>%
     left_join(gene_set_mdata, by='gene_set') %>%
-    filter(num_missing <= cfg$max_missing$disease_stage) %>%
-    select(gene_set, sumz_wt_pval, 
-           `P-value\n(metafor)`=metafor_pval, Collection=collection, 
+    filter(num_missing <= cfg$scores_max_missing_datasets$disease_stage) %>%
+    select(gene_set, sumz_wt_pval,
+           `P-value\n(metafor)`=metafor_pval, Collection=collection,
            `# Genes`=collection_size) %>%
     arrange(sumz_wt_pval) %>%
     mutate(Rank=dense_rank(sumz_wt_pval)) %>%
@@ -225,12 +229,15 @@ stage_gene_set_effects <- read_feather(file.path(results_dir, "associations/dise
 stage_gene_set_scaled_expr <- read_feather(file.path(results_dir, "disease_stage/scaled/gene_set", "combined.feather")) %>%
   filter(!stage %in% c('early', 'late', 'pre_relapsed'))
 
+ind <- match(stage_gene_set_scaled_expr$dataset, dataset_mdata$dataset)
+stage_gene_set_scaled_expr$dataset_name <- dataset_mdata$name[ind]
+
 #--------------------------------
 # x. Treatment
 #--------------------------------
 treatment_gene_scores <- read_feather(file.path(results_dir, "scores/combined/treatment_response/gene.feather")) %>%
     left_join(gene_mdata, by='symbol') %>%
-    filter(num_missing <= cfg$max_missing$treatment_response) %>%
+    filter(num_missing <= cfg$scores_max_missing_datasets$treatment_response) %>%
     select(symbol, sumz_wt_pval, metafor_pval, description,
            chr_region, cell_cycle_phase, dgidb_categories) %>%
     arrange(sumz_wt_pval) %>%
@@ -243,9 +250,9 @@ treatment_gene_effects <- read_feather(file.path(results_dir, "associations/trea
 
 treatment_gene_set_scores <- read_feather(file.path(results_dir, "scores/combined/treatment_response/gene_set.feather")) %>%
     left_join(gene_set_mdata, by='gene_set') %>%
-    filter(num_missing <= cfg$max_missing$treatment_response) %>%
-    select(gene_set, sumz_wt_pval, 
-           `P-value\n(metafor)`=metafor_pval, Collection=collection, 
+    filter(num_missing <= cfg$scores_max_missing_datasets$treatment_response) %>%
+    select(gene_set, sumz_wt_pval,
+           `P-value\n(metafor)`=metafor_pval, Collection=collection,
            `# Genes`=collection_size) %>%
     arrange(sumz_wt_pval) %>%
     mutate(Rank=dense_rank(sumz_wt_pval)) %>%
@@ -265,6 +272,16 @@ gene_expr <- read_feather(file.path(results_dir, "expr/gene/expr-scaled-full.fea
 gene_set_expr <- read_feather(file.path(results_dir, "expr/gene_set/expr-scaled-full.feather")) %>%
   column_to_rownames("gene_set")
 
+#preview_sample_ind <- sample(1:ncol(gene_expr), cfg$preview_num_samples)
+
+# TEMP / use pipeline gene stats / "num_missing"
+# num_nas <- apply(gene_expr, 1, function(x) { sum(is.na(x)) })
+# mask <- num_nas <= cfg$preview_max_missing_samples
+mask <- complete.cases(gene_expr)
+
+preview_genes <- rownames(gene_expr)[mask]
+preview_genes <- preview_genes[sample(1:length(preview_genes), cfg$preview_num_genes)]
+
 #--------------------------------
 # x. Co-expression
 #--------------------------------
@@ -283,6 +300,11 @@ log_info(paste0(head(gene_coex_opts, 3), collapse=' '))
 gene_set_coex_opts <- gene_set_scores_all %>%
   filter(gene_set %in% rownames(gene_set_coex)) %>%
   pull(gene_set)
+
+#--------------------------------
+# x. Expr data prevews (?)
+#--------------------------------
+
 
 #--------------------------------
 # x. TCGA gene survival data

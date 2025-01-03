@@ -40,6 +40,7 @@ server <- function(input, output, session) {
       as.data.frame() %>%
       setNames(c("P-value", "Hazard Ratio", "Std. Error")) %>%
       rownames_to_column("Dataset") %>%
+      na.omit() %>%
       mutate(Dataset=str_replace(Dataset, '_overall_survival', ''))
   })
 
@@ -96,8 +97,12 @@ server <- function(input, output, session) {
         time_units <- "Months"
       }
 
+      dataset_name <-  dataset_mdata %>% 
+        filter(dataset == acc) %>%
+        pull(name)
+
       if (sum(!is.na(feat_expr)) > 0) {
-        plts[[acc]] <- plot_survival(df, acc, time_units, surv_expr_cutoffs, cfg$colors)
+        plts[[acc]] <- plot_survival(df, dataset_name, time_units, surv_expr_cutoffs, cfg$colors)
       }
     }
 
@@ -132,6 +137,7 @@ server <- function(input, output, session) {
       as.data.frame() %>%
       setNames(c("P-value", "Hazard Ratio", "Std. Error")) %>%
       rownames_to_column("Dataset") %>%
+      na.omit() %>%
       mutate(Dataset=str_replace(Dataset, '_overall_survival', ''))
   })
 
@@ -189,8 +195,12 @@ server <- function(input, output, session) {
         time_units <- "Months"
       }
 
+      dataset_name <-  dataset_mdata %>% 
+        filter(dataset == acc) %>%
+        pull(name)
+
       if (sum(!is.na(feat_expr)) > 0) {
-        plts[[acc]] <- plot_survival(df, acc, time_units, surv_expr_cutoffs, cfg$colors)
+        plts[[acc]] <- plot_survival(df, dataset_name, time_units, surv_expr_cutoffs, cfg$colors)
       }
     }
 
@@ -234,6 +244,7 @@ server <- function(input, output, session) {
       as.data.frame() %>%
       setNames(c("P-value", "Odds Ratio", "Std. Error")) %>%
       rownames_to_column("Dataset") %>%
+      na.omit() %>%
       mutate(Dataset=str_replace(Dataset, '_disease_stage', ''))
   })
 
@@ -257,10 +268,11 @@ server <- function(input, output, session) {
       as.data.frame() %>%
       setNames(c("P-value", "Odds Ratio", "Std. Error")) %>%
       rownames_to_column("Dataset") %>%
+      na.omit() %>%
       mutate(Dataset=str_replace(Dataset, '_disease_stage', ''))
   })
 
-  output$stage_gene_summary_html <- output$surv_os_gene_summary_html <- output$surv_pfs_gene_summary_html <- renderUI({
+  output$stage_gene_summary_html <- output$surv_os_gene_summary_html <- output$surv_pfs_gene_summary_html <- output$treatment_gene_summary_html <- renderUI({
       req(!is.null(selectedGene()))
       gene <- selectedGene()
 
@@ -276,16 +288,36 @@ server <- function(input, output, session) {
         filter(symbol == gene) %>%
         pull(Rank)
 
-      tagList(
-        tags$h2(gene),
-        br(),
-        tags$h4("MM30 Rankings:"),
-        br(),
-        HTML(sprintf("All: <b>%d</b>",  all_rank)),
-        br(),
-        HTML(sprintf("Overall Survival (OS): <b>%d</b>", surv_os_rank)),
-        br(),
-        HTML(sprintf("Progression-free Survival (PFS): <b>%d</b>", surv_pfs_rank))
+      stage_rank <- stage_gene_scores %>%
+        filter(symbol == gene) %>%
+        pull(Rank)
+
+      treatment_rank <- treatment_gene_scores %>%
+        filter(symbol == gene) %>%
+        pull(Rank)
+
+      fluidRow(
+        fluidRow(
+          column(
+            width=2,
+            div(tags$h2(gene), style='display: inline-block; vertical-align: middle;'),
+          ), 
+          column(
+            width=4,
+            tagList(
+              HTML(sprintf("All: <b>%d</b>",  all_rank)),
+              br(),
+              HTML(sprintf("Overall Survival (OS): <b>%d</b>", surv_os_rank)),
+              br(),
+              HTML(sprintf("Progression-free Survival (PFS): <b>%d</b>", surv_pfs_rank)),
+              br(),
+              HTML(sprintf("Disease Stage: <b>%d</b>", stage_rank)),
+              br(),
+              HTML(sprintf("Treatment: <b>%d</b>", treatment_rank)),
+            )
+          )
+        ),
+        hr()
       )
   })
 
@@ -305,6 +337,14 @@ server <- function(input, output, session) {
         filter(gene_set == selected_gene_set) %>%
         pull(Rank)
 
+      stage_rank <- stage_gene_set_scores %>%
+        filter(gene_set == selected_gene_set) %>%
+        pull(Rank)
+
+      treatment_rank <- treatment_gene_set_scores %>%
+        filter(gene_set == selected_gene_set) %>%
+        pull(Rank)
+
       gene_set_info <- gene_set_mdata %>%
         filter(gene_set == selected_gene_set)
 
@@ -317,20 +357,37 @@ server <- function(input, output, session) {
       num_genes <- gene_set_info %>%
         pull(collection_size)
 
-      tagList(
-        tags$h2(sprintf("%s / %s (n=%d)", collection, selected_gene_set, num_genes)),
-        br(),
-        tags$a(url, target="_blank", href=url),
-        tags$h4("MM30 Rankings:"),
-        br(),
-        HTML(sprintf("All: <b>%d</b>",  all_rank)),
-        br(),
-        HTML(sprintf("Overall Survival (OS): <b>%d</b>", surv_os_rank)),
-        br(),
-        HTML(sprintf("Progression-free Survival (PFS): <b>%d</b>", surv_pfs_rank))
+      fluidRow(
+        fluidRow(
+          column(
+            width=3,
+            div(
+                tagList(
+                  tags$h2(sprintf("%s / %s (n=%d)", collection, selected_gene_set, num_genes)), 
+                  br(),
+                  tags$a(url, target="_blank", href=url),
+                ),
+                style='display: inline-block; vertical-align: middle;'
+            ),
+          ), 
+          column(
+            width=3,
+            tagList(
+              HTML(sprintf("All: <b>%d</b>",  all_rank)),
+              br(),
+              HTML(sprintf("Overall Survival (OS): <b>%d</b>", surv_os_rank)),
+              br(),
+              HTML(sprintf("Progression-free Survival (PFS): <b>%d</b>", surv_pfs_rank)),
+              br(),
+              HTML(sprintf("Disease Stage: <b>%d</b>", stage_rank)),
+              br(),
+              HTML(sprintf("Treatment: <b>%d</b>", treatment_rank))
+            )
+          )
+        ),
+        hr()
       )
   })
-
 
   output$stage_gene_details_tbl <- renderTable({
     stage_gene_details()
@@ -378,21 +435,6 @@ server <- function(input, output, session) {
       formatSignif(columns=c("P-value\n(metap)", "P-value\n(metafor)"), digits=3)
   })
 
-  output$stage_gene_set_plot <- renderPlot({
-    req(input$stage_gene_set_scores_tbl_rows_selected)
-
-    gene_set_name <- stage_gene_set_selected()
-
-    df <- stage_gene_set_scaled_expr %>%
-      filter(gene_set == gene_set_name) %>%
-      select(-gene_set)
-
-    ggplot(df, aes(x=stage, y=expr, fill=stage)) +
-      geom_bar(stat="identity") +
-      scale_fill_manual(values=cfg$colors) +
-      facet_wrap(~dataset, ncol=3, scales='free')
-  })
-
   output$stage_gene_plot <- renderPlot({
     req(input$stage_gene_scores_tbl_rows_selected)
 
@@ -405,7 +447,22 @@ server <- function(input, output, session) {
     ggplot(df, aes(x=stage, y=expr, fill=stage)) +
       geom_bar(stat="identity") +
       scale_fill_manual(values=cfg$colors) +
-      facet_wrap(~dataset, ncol=3, scales='free')
+      facet_wrap(~dataset_name, ncol=3, scales='free')
+  })
+
+  output$stage_gene_set_plot <- renderPlot({
+    req(input$stage_gene_set_scores_tbl_rows_selected)
+
+    gene_set_name <- stage_gene_set_selected()
+
+    df <- stage_gene_set_scaled_expr %>%
+      filter(gene_set == gene_set_name) %>%
+      select(-gene_set)
+
+    ggplot(df, aes(x=stage, y=expr, fill=stage)) +
+      geom_bar(stat="identity") +
+      scale_fill_manual(values=cfg$colors) +
+      facet_wrap(~dataset_name, ncol=3, scales='free')
   })
 
   ############################################################
@@ -455,6 +512,7 @@ server <- function(input, output, session) {
       as.data.frame() %>%
       setNames(c("P-value", "Effect", "Std. Error")) %>%
       rownames_to_column("Dataset") %>%
+      na.omit() %>%
       mutate(Dataset=str_replace(Dataset, '_treatment_response', ''))
   })
 
@@ -566,6 +624,8 @@ server <- function(input, output, session) {
       layout(
         title=list(
           text=sprintf("Treatment response (%s)", gene_name),
+          xaxis = list(title = 'Patient response'),
+          yaxis = list(title = 'Gene expression (scaled)'),
           font=list(size=17)
         )
       )%>%
@@ -592,19 +652,19 @@ server <- function(input, output, session) {
     df$disease_stage[is.na(df$disease_stage)] <- "Unknown"
     df <- df[complete.cases(df), ]
 
-    # compute linear model r^2 for each dataset and adjust experiment field so that
+    # compute linear model r^2 for each dataset and adjust dataset field so that
     # it is included in the plot titles
-    for (expt_id in unique(df$experiment)) {
+    for (dataset_id in unique(df$dataset)) {
       expt_df <- df %>%
-        filter(experiment == expt_id)
+        filter(dataset == dataset_id)
 
       fit <- summary(lm(expr(!!sym(feat1) ~ !!sym(feat2)), data=expt_df))
 
       r2 <- fit$r.squared
       pval <- fit$coefficients[2, 'Pr(>|t|)']
 
-      expt_label <- sprintf("%s (R^2 %0.2f)", expt_id, r2, pval)
-      df$experiment[df$experiment == expt_id] <- expt_label
+      expt_label <- sprintf("%s (R^2 %0.2f, pval = %0.2f)", dataset_id, r2, pval)
+      df$dataset[df$dataset == dataset_id] <- expt_label
     }
 
     df
@@ -620,7 +680,7 @@ server <- function(input, output, session) {
       geom_point(aes(color=disease_stage)) +
       geom_smooth(method='lm') +
       ggtitle(sprintf("Gene expression: %s vs. %s", feat2, feat1)) +
-      facet_wrap(~experiment, scales='free') +
+      facet_wrap(~dataset, scales='free') +
       xlab(feat1) +
       ylab(feat2)
   })
@@ -640,19 +700,19 @@ server <- function(input, output, session) {
     df$disease_stage[is.na(df$disease_stage)] <- "Unknown"
     df <- df[complete.cases(df), ]
 
-    # compute linear model r^2 for each dataset and adjust experiment field so that
+    # compute linear model r^2 for each dataset and adjust dataset field so that
     # it is included in the plot titles
-    for (expt_id in unique(df$experiment)) {
+    for (dataset_id in unique(df$dataset)) {
       expt_df <- df %>%
-        filter(experiment == expt_id)
+        filter(dataset == dataset_id)
 
       fit <- summary(lm(expr(!!sym(feat1) ~ !!sym(feat2)), data=expt_df))
 
       r2 <- fit$r.squared
       pval <- fit$coefficients[2, 'Pr(>|t|)']
 
-      expt_label <- sprintf("%s (R^2 %0.2f)", expt_id, r2, pval)
-      df$experiment[df$experiment == expt_id] <- expt_label
+      expt_label <- sprintf("%s (R^2 %0.2f)", dataset_id, r2, pval)
+      df$dataset[df$dataset == dataset_id] <- expt_label
     }
 
     df
@@ -668,7 +728,7 @@ server <- function(input, output, session) {
       geom_point(aes(color=disease_stage)) +
       geom_smooth(method='lm') +
       ggtitle(sprintf("Gene set expression: %s vs. %s", feat2, feat1)) +
-      facet_wrap(~experiment, scales='free') +
+      facet_wrap(~dataset, scales='free') +
       xlab(feat1) +
       ylab(feat2)
   })
@@ -732,13 +792,31 @@ server <- function(input, output, session) {
   ###################################
   output$datasets_tbl <- renderDT({
     df <- dataset_mdata %>%
-      select(dataset, title, num_samples)
+      select(dataset=name, accession=dataset, num_samples, sample_type, disease_stages, platform_type)
 
     DT::datatable(df, style="bootstrap", escape=FALSE,  rownames=FALSE, selection=selectOpts,
-                  options=tableOpts)
+                  options=list(pageLength=50, scrollX=TRUE))
+  })
+
+  output$dataset_preview_plot <- renderPlot({
+    req(input$datasets_tbl_rows_selected)
+    acc <- dataset_mdata$dataset[input$datasets_tbl_rows_selected]
+
+    sample_ids <- sample_mdata %>%
+      filter(dataset == acc) %>%
+      pull(sample_id)
+
+    # dat <- log1p(gene_expr[preview_genes, sample_ids])
+    dat <- log1p(gene_expr[preview_genes, sample_ids])
+    
+    # size factor scaled + log transformed
+    plt_title <- sprintf("Gene Expression (n=%d genes)", cfg$preview_num_genes)
+
+    aheatmap(dat, Rowv=TRUE, Colv=TRUE, color=magma(100), main=plt_title)
   })
 
   output$dataset_summary <- renderUI({
+    req(input$datasets_tbl_rows_selected)
     acc <- dataset_mdata$dataset[input$datasets_tbl_rows_selected]
 
     mdat <- dataset_mdata %>%
@@ -747,6 +825,8 @@ server <- function(input, output, session) {
 
     tagList(
       tags$h2(mdat$title),
+      br(),
+      tags$h3(mdat$name),
       br(),
       tags$a(acc, target="_blank", href=mdat$urls),
       br(),

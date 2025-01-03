@@ -34,19 +34,17 @@ ui <- function(request) {
             ),
             column(
               width=6,
-              fluidRow(
+              uiOutput("surv_os_gene_summary_html"),
+              withSpinner(plotOutput("surv_os_gene_plot", height="800px")),
+              tagList(
+                tags$hr(),
                 column(
                   width=6, 
-                  uiOutput("surv_os_gene_summary_html"),
-                )
-              ),
-              withSpinner(plotOutput("surv_os_gene_plot", height="800px")),
-              withSpinner(
-                tagList(
-                  tags$hr(),
                   tags$h3("Survival regression results:"),
                   tableOutput("surv_os_gene_details_tbl"),
-                  tags$hr(),
+                ),
+                column(
+                  width=6, 
                   tags$h3("TCGA survival associations:"),
                   tableOutput("surv_os_gene_tcga_tbl")
                 ),
@@ -66,23 +64,16 @@ ui <- function(request) {
             ),
             column(
               width=6,
-              fluidRow(
-                column(
-                  width=6, 
-                  uiOutput("surv_os_gene_set_summary_html"),
-                )
-              ),
+              uiOutput("surv_os_gene_set_summary_html"),
               withSpinner(plotOutput("surv_os_gene_set_plot", height="800px")),
-              withSpinner(
-                tagList(
-                  tags$hr(),
-                  tags$h3("Survival regression results:"),
-                  tableOutput("surv_os_gene_set_details_tbl"),
-                  tags$hr(),
-                  tags$h3("Gene set members:"),
-                  tableOutput("surv_os_gene_set_gene_tbl"),
-                ),
-              )
+              tagList(
+                tags$hr(),
+                tags$h3("Survival regression results:"),
+                tableOutput("surv_os_gene_set_details_tbl"),
+                tags$hr(),
+                tags$h3("Gene set members:"),
+                tableOutput("surv_os_gene_set_gene_tbl"),
+              ),
             ),
           ),
         ),
@@ -108,19 +99,17 @@ ui <- function(request) {
             ),
             column(
               width=6,
-              fluidRow(
-                column(
-                  width=3, 
-                  uiOutput("stage_gene_summary_html"),
-                )
-              ),
+              uiOutput("stage_gene_summary_html"),
               withSpinner(plotOutput("stage_gene_plot", height="800px")),
-              withSpinner(
-                tagList(
-                  tags$hr(),
+              tagList(
+                tags$hr(),
+                column(
+                  width=6, 
                   tags$h3("Logistic regression results:"),
                   tableOutput("stage_gene_details_tbl"),
-                  tags$hr(),
+                ),
+                column(
+                  width=6, 
                   tags$h3("TCGA survival associations:"),
                   tableOutput("stage_gene_tcga_tbl")
                 ),
@@ -140,23 +129,16 @@ ui <- function(request) {
             ),
             column(
               width=6,
-              fluidRow(
-                column(
-                  width=6, 
-                  uiOutput("stage_gene_set_summary_html"),
-                )
-              ),
+              uiOutput("stage_gene_set_summary_html"),
               withSpinner(plotOutput("stage_gene_set_plot", height="800px")),
-              withSpinner(
-                tagList(
-                  tags$hr(),
-                  tags$h3("Regression results:"),
-                  tableOutput("stage_gene_set_details_tbl"),
-                  tags$hr(),
-                  tags$h3("Genes:"),
-                  tableOutput("stage_gene_set_gene_tbl"),
-                ),
-              )
+              tagList(
+                tags$hr(),
+                tags$h3("Regression results:"),
+                tableOutput("stage_gene_set_details_tbl"),
+                tags$hr(),
+                tags$h3("Genes:"),
+                tableOutput("stage_gene_set_gene_tbl"),
+              ),
             ),
           ),
         ),
@@ -182,19 +164,17 @@ ui <- function(request) {
             ),
             column(
               width=6,
-              fluidRow(
-                column(
-                  width=3, 
-                  uiOutput("treatment_gene_summary_html"),
-                )
-              ),
+              uiOutput("treatment_gene_summary_html"),
               withSpinner(plotlyOutput("treatment_gene_plot", height="800px")),
-              withSpinner(
-                tagList(
-                  tags$hr(),
+              tagList(
+                tags$hr(),
+                column(
+                  width=6, 
                   tags$h3("Treatment association test results:"),
                   tableOutput("treatment_gene_details_tbl"),
-                  tags$hr(),
+                ),
+                column(
+                  width=6, 
                   tags$h3("TCGA survival associations:"),
                   tableOutput("treatment_gene_tcga_tbl")
                 ),
@@ -283,15 +263,19 @@ ui <- function(request) {
         "Datasets",
         fluidRow(
           column(
-              width=6,
+              width=5,
               withSpinner(DTOutput("datasets_tbl"))
           ),
           column(
-            width=6,
+            width=7,
             fluidRow(
               column(
                 width=6, 
                 uiOutput("dataset_summary"),
+              ),
+              column(
+                width=6, 
+                withSpinner(plotOutput("dataset_preview_plot", height="800px")),
               )
             ),
           ),
