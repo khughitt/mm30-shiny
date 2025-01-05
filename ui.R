@@ -95,23 +95,23 @@ ui <- function(request) {
           fluidRow(
             column(
               width=6,
-              withSpinner(DTOutput("stage_gene_scores_tbl"))
+              withSpinner(DTOutput("gene_stage_scores_tbl"))
             ),
             column(
               width=6,
-              uiOutput("stage_gene_summary_html"),
-              withSpinner(plotOutput("stage_gene_plot", height="800px")),
+              uiOutput("gene_stage_summary_html"),
+              withSpinner(plotOutput("gene_stage_plot", height="800px")),
               tagList(
                 tags$hr(),
                 column(
                   width=6, 
                   tags$h3("Logistic regression results:"),
-                  tableOutput("stage_gene_details_tbl"),
+                  tableOutput("gene_stage_details_tbl"),
                 ),
                 column(
                   width=6, 
                   tags$h3("TCGA survival associations:"),
-                  tableOutput("stage_gene_tcga_tbl")
+                  tableOutput("gene_stage_tcga_tbl")
                 ),
               ),
             ),
@@ -125,23 +125,64 @@ ui <- function(request) {
           fluidRow(
             column(
               width=6,
-              withSpinner(DTOutput("stage_gene_set_scores_tbl"))
+              withSpinner(DTOutput("gene_set_stage_scores_tbl"))
             ),
             column(
               width=6,
-              uiOutput("stage_gene_set_summary_html"),
-              withSpinner(plotOutput("stage_gene_set_plot", height="800px")),
+              uiOutput("gene_set_stage_summary_html"),
+              withSpinner(plotOutput("gene_set_stage_plot", height="800px")),
               tagList(
                 tags$hr(),
                 tags$h3("Regression results:"),
-                tableOutput("stage_gene_set_details_tbl"),
+                tableOutput("gene_set_stage_details_tbl"),
                 tags$hr(),
                 tags$h3("Genes:"),
-                tableOutput("stage_gene_set_gene_tbl"),
+                tableOutput("gene_stage_set_gene_tbl"),
               ),
             ),
           ),
         ),
+      ),
+      ######################################## 
+      # Disease stage transitions
+      ######################################## 
+      tabPanel(
+        "Stage Transitions",
+        fluidRow(
+            column(
+              width=2,
+              selectInput("transition_feat_type", "Genes / Gene sets:", 
+                          c("Genes"="genes", "Gene sets"="gene_sets"))
+            ),
+            column(
+              width=2,
+              selectInput("transition_opt", "Transition:", 
+                          c("Healthy vs. MGUS"="Healthy_MGUS",
+                            "MGUS vs. SMM"="MGUS_SMM",
+                            "SMM vs. MM"="SMM_MM",
+                            "MM vs. RRMM"="MM_RRMM",
+                            "Healthy/MGUS/SMM vs. MM/RRMM"="early_vs_late", 
+                            "Healthy/MGUS vs. SMM/MM/RRMM"="before_vs_after_smm",
+                            "Pre- vs. Post-relapse"="before_vs_after_relapse"))
+            )
+        ),
+        #---------------------------------------
+        # Disease stage transitions > genes
+        #---------------------------------------
+        conditionalPanel(
+          condition = "input.transition_feat_type == 'genes'",
+          fluidRow(
+            column(
+              width=6,
+              withSpinner(DTOutput("gene_stage_transitions_tbl"))
+            ),
+            column(
+              width=6,
+              tags$h3("Individual datasets:"),
+              tableOutput("gene_stage_transitions_details_tbl")
+            )
+          )
+        )
       ),
       ######################################## 
       # Treatment

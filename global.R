@@ -192,7 +192,7 @@ surv_pfs_gene_set_effects <- read_feather(file.path(results_dir, "associations/s
 #--------------------------------
 # x. Disease stage
 #--------------------------------
-stage_gene_scores <- read_feather(file.path(results_dir, "scores/combined/disease_stage/gene.feather")) %>%
+gene_stage_scores <- read_feather(file.path(results_dir, "scores/combined/disease_stage/gene.feather")) %>%
     left_join(gene_mdata, by='symbol') %>%
     filter(num_missing <= cfg$scores_max_missing_datasets$disease_stage) %>%
     select(symbol, sumz_wt_pval, metafor_pval, description,
@@ -201,17 +201,17 @@ stage_gene_scores <- read_feather(file.path(results_dir, "scores/combined/diseas
     mutate(Rank=dense_rank(sumz_wt_pval)) %>%
     select(Rank, everything())
 
-stage_gene_pvals   <- read_feather(file.path(results_dir, "associations/disease_stage/gene/pvals.feather"))
-stage_gene_errors  <- read_feather(file.path(results_dir, "associations/disease_stage/gene/errors.feather"))
-stage_gene_effects <- read_feather(file.path(results_dir, "associations/disease_stage/gene/effects.feather"))
+gene_stage_pvals   <- read_feather(file.path(results_dir, "associations/disease_stage/gene/pvals.feather"))
+gene_stage_errors  <- read_feather(file.path(results_dir, "associations/disease_stage/gene/errors.feather"))
+gene_stage_effects <- read_feather(file.path(results_dir, "associations/disease_stage/gene/effects.feather"))
 
-stage_gene_scaled_expr <- read_feather(file.path(results_dir, "disease_stage/scaled/gene", "combined.feather")) %>%
+gene_stage_scaled_expr <- read_feather(file.path(results_dir, "disease_stage/scaled/gene", "combined.feather")) %>%
   filter(!stage %in% c('early', 'late', 'pre_relapsed'))
 
-ind <- match(stage_gene_scaled_expr$dataset, dataset_mdata$dataset)
-stage_gene_scaled_expr$dataset_name <- dataset_mdata$name[ind]
+ind <- match(gene_stage_scaled_expr$dataset, dataset_mdata$dataset)
+gene_stage_scaled_expr$dataset_name <- dataset_mdata$name[ind]
 
-stage_gene_set_scores <- read_feather(file.path(results_dir, "scores/combined/disease_stage/gene_set.feather")) %>%
+gene_set_stage_scores <- read_feather(file.path(results_dir, "scores/combined/disease_stage/gene_set.feather")) %>%
     left_join(gene_set_mdata, by='gene_set') %>%
     filter(num_missing <= cfg$scores_max_missing_datasets$disease_stage) %>%
     select(gene_set, sumz_wt_pval,
@@ -222,15 +222,28 @@ stage_gene_set_scores <- read_feather(file.path(results_dir, "scores/combined/di
     rename(`P-value\n(metap)`=sumz_wt_pval) %>%
     select(Rank, everything())
 
-stage_gene_set_pvals   <- read_feather(file.path(results_dir, "associations/disease_stage/gene_set/pvals.feather"))
-stage_gene_set_errors  <- read_feather(file.path(results_dir, "associations/disease_stage/gene_set/errors.feather"))
-stage_gene_set_effects <- read_feather(file.path(results_dir, "associations/disease_stage/gene_set/effects.feather"))
+gene_set_stage_pvals   <- read_feather(file.path(results_dir, "associations/disease_stage/gene_set/pvals.feather"))
+gene_set_stage_errors  <- read_feather(file.path(results_dir, "associations/disease_stage/gene_set/errors.feather"))
+gene_set_stage_effects <- read_feather(file.path(results_dir, "associations/disease_stage/gene_set/effects.feather"))
 
-stage_gene_set_scaled_expr <- read_feather(file.path(results_dir, "disease_stage/scaled/gene_set", "combined.feather")) %>%
+gene_set_stage_scaled_expr <- read_feather(file.path(results_dir, "disease_stage/scaled/gene_set", "combined.feather")) %>%
   filter(!stage %in% c('early', 'late', 'pre_relapsed'))
 
-ind <- match(stage_gene_set_scaled_expr$dataset, dataset_mdata$dataset)
-stage_gene_set_scaled_expr$dataset_name <- dataset_mdata$name[ind]
+ind <- match(gene_set_stage_scaled_expr$dataset, dataset_mdata$dataset)
+gene_set_stage_scaled_expr$dataset_name <- dataset_mdata$name[ind]
+
+transitions_dir <- file.path(results_dir, "disease_stage/transitions")
+transition_files <- Sys.glob(file.path(transitions_dir, "gene/*.feather"))
+transitions <- sub(".feather", "", basename(transition_files))
+
+gene_transitions <- lapply(transition_files, read_feather)
+names(gene_transitions) <- transitions
+
+#gene_stage_transitions <- read_feather(file.path(results_dir, "disease_stage/transitions/gene", "combined.feather")) %>%
+#   arrange(-Healthy_MGUS)
+
+# counts are the same for genes / gene sets
+# transition_counts <- read_feather(file.path(results_dir, "disease_stage/transitions/gene", "counts.feather"))
 
 #--------------------------------
 # x. Treatment
