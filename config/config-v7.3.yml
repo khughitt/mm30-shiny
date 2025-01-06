@@ -10,6 +10,7 @@ random_seed: 123
 
 # plot colors
 colors: ["#00AFBB", "#E7B800", "#FC4E07", "#BB3099", "#EE0099", "#0000AC"]
+stage_colors: ["#F8766D", "#A3A500", "#00BF7D", "#00B0F6", "#E76BF3"]
 
 # survival plot upper/lower percentil cutoff choices
 surv_cutoff_opts: [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]

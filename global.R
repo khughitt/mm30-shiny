@@ -239,12 +239,6 @@ transitions <- sub(".feather", "", basename(transition_files))
 gene_transitions <- lapply(transition_files, read_feather)
 names(gene_transitions) <- transitions
 
-#gene_stage_transitions <- read_feather(file.path(results_dir, "disease_stage/transitions/gene", "combined.feather")) %>%
-#   arrange(-Healthy_MGUS)
-
-# counts are the same for genes / gene sets
-# transition_counts <- read_feather(file.path(results_dir, "disease_stage/transitions/gene", "counts.feather"))
-
 #--------------------------------
 # x. Treatment
 #--------------------------------
@@ -308,16 +302,9 @@ gene_coex_opts <- gene_scores_all %>%
   filter(symbol %in% rownames(gene_coex)) %>%
   pull(symbol)
 
-log_info(paste0(head(gene_coex_opts, 3), collapse=' '))
-
 gene_set_coex_opts <- gene_set_scores_all %>%
   filter(gene_set %in% rownames(gene_set_coex)) %>%
   pull(gene_set)
-
-#--------------------------------
-# x. Expr data prevews (?)
-#--------------------------------
-
 
 #--------------------------------
 # x. TCGA gene survival data

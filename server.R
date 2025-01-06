@@ -16,10 +16,6 @@ server <- function(input, output, session) {
     pull(dataset) %>%
     sort(TRUE)
 
-  surv_os_gene_selected <- reactive({
-    surv_os_gene_scores$symbol[input$surv_os_gene_scores_tbl_rows_selected]
-  })
-
   surv_os_gene_details <- reactive({
     req(input$surv_os_gene_scores_tbl_rows_selected)
 
@@ -113,10 +109,6 @@ server <- function(input, output, session) {
   #---------------------------------------
   # Overall survival > gene sets
   #---------------------------------------
-  surv_os_gene_set_selected <- reactive({
-    surv_os_gene_set_scores$gene_set[input$surv_os_gene_set_scores_tbl_rows_selected]
-  })
-
   surv_os_gene_set_details <- reactive({
     req(input$surv_os_gene_set_scores_tbl_rows_selected)
 
@@ -215,14 +207,6 @@ server <- function(input, output, session) {
     filter(phenotype=='disease_stage') %>%
     pull(dataset) %>%
     sort(TRUE)
-
-  gene_stage_selected <- reactive({
-    gene_stage_scores$symbol[input$gene_stage_scores_tbl_rows_selected]
-  })
-
-  gene_set_stage_selected <- reactive({
-    gene_set_stage_scores$gene_set[input$gene_set_stage_scores_tbl_rows_selected]
-  })
 
   gene_stage_details <- reactive({
     req(input$gene_stage_scores_tbl_rows_selected)
@@ -439,16 +423,15 @@ server <- function(input, output, session) {
     req(input$transition_feat_type)
     req(input$transition_opt)
 
-
-
     gene_transitions[[input$transition_opt]] %>%
       arrange(-median_change) %>%
-      mutate(median_change=100 * median_change) %>%
-      select(Gene=symbol, `# datasets`=num_datasets, `Quantile change (median)`=median_change)
+      filter(num_datasets >= 2) %>%
+      mutate(median_change=100 * median_change)
   })
 
   output$gene_stage_transitions_tbl <- renderDT({
-    df <- gene_stage_transitions_df()
+    df <- gene_stage_transitions_df() %>%
+      select(Gene=symbol, `# datasets`=num_datasets, `Quantile change (median)`=median_change)
 
     format_fields <- c('Quantile change (median)')
 
@@ -457,12 +440,10 @@ server <- function(input, output, session) {
       formatSignif(columns=format_fields, digits=3)
   })
 
-  output$gene_stage_transitions_details_tbl <- renderTable({
-    # req(input$transition_feat_type)
-    # req(input$transition_opt)
+  gene_stage_transitions_details_df <- reactive({
     req(input$gene_stage_transitions_tbl_rows_selected)
     
-    selected_gene <- gene_stage_transitions_df()$Gene[input$gene_stage_transitions_tbl_rows_selected]
+    selected_gene <- gene_stage_transitions_selected()
 
     df <- gene_transitions[[input$transition_opt]] %>%
       filter(symbol == selected_gene) %>%
@@ -470,34 +451,61 @@ server <- function(input, output, session) {
       t() %>% 
       as.data.frame() %>%
       na.omit() %>%
-      rownames_to_column("Dataset")
+      rownames_to_column("Accession")
 
     colnames(df)[2] <- "Quantile change"
-
     df[, 2] <- 100 * df[, 2]
 
-    return(df)
+
+    ind <- match(df$Accession, dataset_mdata$dataset)
+    df$Dataset <- dataset_mdata$name[ind]
+
+    df %>%
+      select(Dataset, Accession, everything()) %>%
+      arrange(Dataset)
+  })
+
+  output$gene_stage_transitions_details_tbl <- renderTable({
+    req(input$gene_stage_transitions_tbl_rows_selected)
+    gene_stage_transitions_details_df()
   }, digits=3)
 
-  # df <- gene_stage_transitions %>%
-  #   select(symbol,
-  #          `Healthy vs. MGUS`=Healthy_MGUS,
-  #          `MGUS vs. SMM`=`MGUS_SMM`,
-  #          `SMM vs. MM`=`SMM_MM`,
-  #          `MM vs. RRMM`=`MM_RRMM`,
-  #          `Healthy/MGUS/SMM vs. MM/RRMM`=early_vs_late,
-  #          `Healthy/MGUS vs. SMM/MM/RRMM`=earlier_vs_less_late,
-  #          `Pre- vs. Post-relapse`=before_vs_after_relapse)
+  output$gene_stage_transitions_plot <- renderPlot({
+    req(input$gene_stage_transitions_tbl_rows_selected)
 
-  # orig_fields <- c("Healthy_MGUS", "MGUS_SMM", "SMM_MM", "MM_RRMM", "early_vs_late",
-  #                  "earlier_vs_less_late", "before_vs_after_relapse")
+    gene_name <- gene_stage_transitions_selected()
 
-  # ind <- match(orig_fields, transition_counts$transition)
-  # num_samples <- transition_counts$num[ind]
-  #
-  # colnames(df)[-1] <- paste0(colnames(df)[-1], sprintf(" (n=%d)", num_samples))
-  #
-  # numeric_fields <- colnames(df)[-1]
+    # determine which datasets include the relevant disease stages
+    datasets <- gene_stage_transitions_details_df()$Accession
+
+    df <- gene_stage_scaled_expr %>%
+      filter(symbol == gene_name) %>%
+      filter(dataset %in% datasets) %>%
+      select(-symbol)
+
+    # set color to grey for stages that aren't part of the transition
+    transition_stages <- list(
+      "Healthy_MGUS"=c("Healthy", "MGUS"),
+      "MGUS_SMM"=c("MGUS", "SMM"),
+      "SMM_MM"=c("SMM", "MM"),
+      "MM_RRMM"=c("MM", "RRMM"),
+      "early_vs_late"=c("Healthy", "MGUS", "SMM", "MM", "RRMM"),
+      "before_vs_after_smm"=c("Healthy", "MGUS", "SMM", "MM", "RRMM"),
+      "before_vs_after_relapse"=c("Healthy", "MGUS", "SMM", "MM", "RRMM")
+    )
+
+    stages <- transition_stages[[input$transition_opt]]
+
+    cmap <- cfg$stage_colors
+    names(cmap) <- c("Healthy", "MGUS", "SMM", "MM", "RRMM")
+
+    cmap[!names(cmap) %in% stages] <- "#888888"
+
+    ggplot(df, aes(x=stage, y=expr, fill=stage)) +
+      geom_bar(stat="identity") +
+      scale_fill_manual(values=cmap) +
+      facet_wrap(~dataset_name, ncol=3, scales='free')
+  })
 
   output$gene_stage_plot <- renderPlot({
     req(input$gene_stage_scores_tbl_rows_selected)
@@ -510,7 +518,7 @@ server <- function(input, output, session) {
 
     ggplot(df, aes(x=stage, y=expr, fill=stage)) +
       geom_bar(stat="identity") +
-      scale_fill_manual(values=cfg$colors) +
+      scale_fill_manual(values=cfg$stage_colors) +
       facet_wrap(~dataset_name, ncol=3, scales='free')
   })
 
@@ -525,7 +533,7 @@ server <- function(input, output, session) {
 
     ggplot(df, aes(x=stage, y=expr, fill=stage)) +
       geom_bar(stat="identity") +
-      scale_fill_manual(values=cfg$colors) +
+      scale_fill_manual(values=cfg$stage_colors) +
       facet_wrap(~dataset_name, ncol=3, scales='free')
   })
 
@@ -540,10 +548,6 @@ server <- function(input, output, session) {
     filter(phenotype=='treatment_response') %>%
     pull(dataset) %>%
     sort(TRUE)
-
-  treatment_gene_selected <- reactive({
-    treatment_gene_scores$symbol[input$treatment_gene_scores_tbl_rows_selected]
-  })
 
   output$treatment_gene_scores_tbl <- renderDT({
     df <- treatment_gene_scores %>%
@@ -744,7 +748,7 @@ server <- function(input, output, session) {
       geom_point(aes(color=disease_stage)) +
       geom_smooth(method='lm') +
       ggtitle(sprintf("Gene expression: %s vs. %s", feat2, feat1)) +
-      facet_wrap(~dataset, scales='free') +
+      facet_wrap(~dataset, scales='free', ncol=8) +
       xlab(feat1) +
       ylab(feat2)
   })
@@ -808,10 +812,6 @@ server <- function(input, output, session) {
       formatSignif(columns=hmcl_cells, digits=3)
   })
 
-  hmcl_gene_selected <- reactive({
-    expr_hmcl$symbol[input$hmcl_expr_tbl_rows_selected]
-  })
-
   output$hmcl_hist_plot <- renderPlot({
     req(input$hmcl_expr_tbl_rows_selected)
 
@@ -831,9 +831,33 @@ server <- function(input, output, session) {
       ylab("Count")
   })
 
+  #
   # common variables to store selected gene / gene set
+  #
   selectedGene <- reactiveVal()
   selectedGeneSet <- reactiveVal()
+
+  surv_os_gene_selected <- reactive({
+    surv_os_gene_scores$symbol[input$surv_os_gene_scores_tbl_rows_selected]
+  })
+  surv_os_gene_set_selected <- reactive({
+    surv_os_gene_set_scores$gene_set[input$surv_os_gene_set_scores_tbl_rows_selected]
+  })
+  gene_stage_selected <- reactive({
+    gene_stage_scores$symbol[input$gene_stage_scores_tbl_rows_selected]
+  })
+  gene_set_stage_selected <- reactive({
+    gene_set_stage_scores$gene_set[input$gene_set_stage_scores_tbl_rows_selected]
+  })
+  gene_stage_transitions_selected <- reactive({
+    gene_stage_transitions_df()$symbol[input$gene_stage_transitions_tbl_rows_selected]
+  })
+  treatment_gene_selected <- reactive({
+    treatment_gene_scores$symbol[input$treatment_gene_scores_tbl_rows_selected]
+  })
+  hmcl_gene_selected <- reactive({
+    expr_hmcl$symbol[input$hmcl_expr_tbl_rows_selected]
+  })
 
   observeEvent(input$surv_os_gene_scores_tbl_rows_selected, {
     selectedGene(surv_os_gene_selected())
@@ -841,12 +865,20 @@ server <- function(input, output, session) {
   observeEvent(input$gene_stage_scores_tbl_rows_selected, {
     selectedGene(gene_stage_selected())
   })
-
   observeEvent(input$surv_os_gene_set_scores_tbl_rows_selected, {
     selectedGeneSet(surv_os_gene_set_selected())
   })
   observeEvent(input$gene_set_stage_scores_tbl_rows_selected, {
     selectedGeneSet(gene_set_stage_selected())
+  })
+  observeEvent(input$gene_stage_transitions_tbl_rows_selected, {
+    selectedGene(gene_stage_transitions_selected())
+  })
+  observeEvent(input$treatment_gene_scores_tbl_rows_selected, {
+    selectedGene(treatment_gene_selected())
+  })
+  observeEvent(input$hmcl_expr_tbl_rows_selected, {
+    selectedGene(hmcl_gene_selected())
   })
 
   ###################################

@@ -173,11 +173,15 @@ ui <- function(request) {
           condition = "input.transition_feat_type == 'genes'",
           fluidRow(
             column(
-              width=6,
+              width=4,
               withSpinner(DTOutput("gene_stage_transitions_tbl"))
             ),
             column(
               width=6,
+              withSpinner(plotOutput("gene_stage_transitions_plot", height="800px")),
+            ),
+            column(
+              width=2,
               tags$h3("Individual datasets:"),
               tableOutput("gene_stage_transitions_details_tbl")
             )
@@ -240,7 +244,7 @@ ui <- function(request) {
           condition = "input.coex_feat_type == 'genes'",
           fluidRow(
             column(
-              width=3,
+              width=2,
               fluidRow(
                 selectizeInput("coex_gene1", "Gene A:", choices=gene_coex_opts, selected=gene_coex_opts[1]),
                 selectizeInput("coex_gene2", "Gene B:", choices=gene_coex_opts, selected=gene_coex_opts[2])
@@ -248,7 +252,7 @@ ui <- function(request) {
             ),
             column(
               width=9,
-              withSpinner(plotOutput("gene_coex_plot", width="1200px", height="1200px"))
+              withSpinner(plotOutput("gene_coex_plot", width="2400px", height="1000px"))
             )
           )
         ),
