@@ -2,9 +2,6 @@
 # MM30 v7.2 configuration
 #
 
-# mm30 pipeline data location
-data_dir: "/data/proj/mm30/7.3"
-
 # seed
 random_seed: 123
 
@@ -28,25 +25,3 @@ preview_num_genes: 512
 # when generating dataset preview plots, genes missing in greater than the specified number of
 # samples (for all datasets) are filtered out prior to subsampling
 preview_max_missing_samples: 0
-
-# metadata
-#geo_metadata: '/data/metadata/geo_metadata.tsv'
-# phenotype_metadata: '/data/metadata/association_metadata.feather'
-# cytogenetic_bands: '/data/metadata/grch38_cyto_bands.tsv'
-
-# individual covariate p-values
-# gene_pvals_indiv: '/data/pvals/gene_association_pvals.feather'
-# pathway_pvals_indiv: '/data/pvals/pathway_association_pvals.feather'
-
-# mm30 scores
-# mm30_scores:
-#   genes:
-#     all: '/data/results/all/mm30_gene_scores.feather'
-#     disease_stage: '/data/results/categories/mm30_gene_disease_stage_scores.feather'
-#     survival: '/data/results/categories/mm30_gene_survival_scores.feather'
-#     treatment: '/data/results/categories/mm30_gene_treatment_scores.feather'
-#   pathways:
-#     all: '/data/results/all/mm30_pathway_scores.feather'
-#     disease_stage: '/data/results/categories/mm30_pathway_disease_stage_scores.feather'
-#     survival: '/data/results/categories/mm30_pathway_survival_scores.feather'
-#     treatment: '/data/results/categories/mm30_pathway_treatment_scores.feather'
