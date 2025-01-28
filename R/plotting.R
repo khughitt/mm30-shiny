@@ -33,7 +33,7 @@ plot_survival <- function(dat, dataset, time_units, expr_cutoffs, color_pal) {
   # display a kaplan meier plot for result
   survminer::ggsurvplot(fit, data=dat, ggtheme=theme_pubr(base_size=16), palette=color_pal,
                         title=plt_title, xlab=sprintf("Time (%s)", time_units),
-                        legend="bottom", legend.title="Legend")
+                        legend="bottom", legend.title="Legend", axes.offset = FALSE)
 
 }
 

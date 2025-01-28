@@ -76,6 +76,26 @@ covariate_mdata <- read_feather(file.path(metadata_dir, "covariates.feather"))
 dataset_mdata <- read_feather(file.path(metadata_dir, "datasets.feather"))
 indiv_mdata <- readRDS(file.path(metadata_dir, "indiv_datasets.rds"))
 
+surv_os_datasets <- covariate_mdata %>%
+  filter(phenotype == "overall_survival") %>%
+  pull(dataset) %>%
+  sort(TRUE)
+
+surv_pfs_datasets <- covariate_mdata %>%
+  filter(phenotype == "prog_free_survival") %>%
+  pull(dataset) %>%
+  sort(TRUE)
+
+stage_datasets <- covariate_mdata %>%
+  filter(phenotype=="disease_stage") %>%
+  pull(dataset) %>%
+  sort(TRUE)
+
+treatment_datasets <- covariate_mdata %>%
+  filter(phenotype=="treatment_response") %>%
+  pull(dataset) %>%
+  sort(TRUE)
+
 #--------------------------------
 # 2. "All"
 #--------------------------------

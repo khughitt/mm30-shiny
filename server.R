@@ -211,11 +211,6 @@ server <- function(input, output, session) {
   #---------------------------------------
   # Overall survival > genes
   #---------------------------------------
-  surv_os_datasets <- covariate_mdata %>%
-    filter(phenotype == "overall_survival") %>%
-    pull(dataset) %>%
-    sort(TRUE)
-
   surv_os_gene_details <- reactive({
     req(input$surv_os_gene_scores_tbl_rows_selected)
 
@@ -287,6 +282,8 @@ server <- function(input, output, session) {
         pull(name)
 
       if (sum(!is.na(feat_expr)) > 0) {
+        # note: because only the upper/lower x % of patients are included in the plots, the "n=" 
+        # value shown in the plot will be smaller than the total number for the dataset
         plts[[acc]] <- plot_survival(df, dataset_name, time_units, surv_expr_cutoffs, cfg$colors)
       }
     }
@@ -396,10 +393,7 @@ server <- function(input, output, session) {
   #---------------------------------------
   # Progression free survival > genes
   #---------------------------------------
-  surv_pfs_datasets <- covariate_mdata %>%
-    filter(phenotype == "prog_free_survival") %>%
-    pull(dataset) %>%
-    sort(TRUE)
+
 
   surv_pfs_gene_details <- reactive({
     req(input$surv_pfs_gene_scores_tbl_rows_selected)
@@ -580,11 +574,6 @@ server <- function(input, output, session) {
   #---------------------------------------
   # Disease Stage > genes
   #---------------------------------------
-  stage_datasets <- covariate_mdata %>%
-    filter(phenotype=="disease_stage") %>%
-    pull(dataset) %>%
-    sort(TRUE)
-
   gene_stage_details <- reactive({
     req(input$gene_stage_scores_tbl_rows_selected)
 
@@ -900,11 +889,6 @@ server <- function(input, output, session) {
   #---------------------------------------
   # Treatment response > genes
   #---------------------------------------
-  treatment_datasets <- covariate_mdata %>%
-    filter(phenotype=="treatment_response") %>%
-    pull(dataset) %>%
-    sort(TRUE)
-
   output$treatment_gene_scores_tbl <- renderDT({
     df <- treatment_gene_scores %>%
       select(Gene=symbol, Rank, `P-value\n(metap)`=sumz_wt_pval,
