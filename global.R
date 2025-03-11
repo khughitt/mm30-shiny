@@ -32,7 +32,7 @@ options(scipen=2, digits=3)
 #log_threshold(DEBUG)
 log_info("Initializing MM30 shiny app..")
 
-cfg <- read_yaml("config/config-v7.3.yml")
+cfg <- read_yaml("config/config-v7.4.yml")
 set.seed(cfg$random_seed)
 
 enableBookmarking("url")
@@ -131,19 +131,19 @@ surv_pfs_gene_set_effects <- read_feather(file.path(assoc_dir, "survival_pfs/gen
 #--------------------------------
 # x. Disease stage
 #--------------------------------
-gene_stage_scores <- read_feather(file.path(scores_dir, "disease_stage/gene.feather"))
-gene_stage_pvals   <- read_feather(file.path(assoc_dir, "disease_stage/gene/pvals.feather"))
-gene_stage_errors  <- read_feather(file.path(assoc_dir, "disease_stage/gene/errors.feather"))
-gene_stage_effects <- read_feather(file.path(assoc_dir, "disease_stage/gene/effects.feather"))
+stage_gene_scores <- read_feather(file.path(scores_dir, "disease_stage/gene.feather"))
+stage_gene_pvals   <- read_feather(file.path(assoc_dir, "disease_stage/gene/pvals.feather"))
+stage_gene_errors  <- read_feather(file.path(assoc_dir, "disease_stage/gene/errors.feather"))
+stage_gene_effects <- read_feather(file.path(assoc_dir, "disease_stage/gene/effects.feather"))
 
-gene_stage_scaled_expr <- read_feather(file.path(expr_dir, "gene", "disease_stage.feather"))
+stage_gene_scaled_expr <- read_feather(file.path(expr_dir, "gene", "disease_stage.feather"))
 
-gene_set_stage_scores <- read_feather(file.path(scores_dir, "disease_stage/gene_set.feather"))
-gene_set_stage_pvals   <- read_feather(file.path(assoc_dir, "disease_stage/gene_set/pvals.feather"))
-gene_set_stage_errors  <- read_feather(file.path(assoc_dir, "disease_stage/gene_set/errors.feather"))
-gene_set_stage_effects <- read_feather(file.path(assoc_dir, "disease_stage/gene_set/effects.feather"))
+stage_gene_set_scores <- read_feather(file.path(scores_dir, "disease_stage/gene_set.feather"))
+stage_gene_set_pvals   <- read_feather(file.path(assoc_dir, "disease_stage/gene_set/pvals.feather"))
+stage_gene_set_errors  <- read_feather(file.path(assoc_dir, "disease_stage/gene_set/errors.feather"))
+stage_gene_set_effects <- read_feather(file.path(assoc_dir, "disease_stage/gene_set/effects.feather"))
 
-gene_set_stage_scaled_expr <- read_feather(file.path(expr_dir, "gene_set", "disease_stage.feather"))
+stage_gene_set_scaled_expr <- read_feather(file.path(expr_dir, "gene_set", "disease_stage.feather"))
 
 gene_transitions <- readRDS(file.path(transitions_dir, "gene.rds"))
 gene_set_transitions <- readRDS(file.path(transitions_dir, "gene_set.rds"))
@@ -235,7 +235,9 @@ tcga <- read_feather(file.path(hpa_dir, "hpa-cancer.feather"))
 #--------------------------------
 # x. HMCL expr
 #--------------------------------
-expr_hmcl <- read_feather(file.path(hmcl_dir, "expr.feather"))
+expr_hmcl <- read_feather(file.path(hmcl_dir, "mean_expr.feather"))
+expr_hmcl <- expr_hmcl[match(gene_scores_all$symbol, expr_hmcl$symbol), ]
+
 hmcl_cells <- colnames(expr_hmcl)[-1]
 
 log_info("Finished loading data..")

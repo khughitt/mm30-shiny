@@ -160,23 +160,23 @@ ui <- function(request) {
           fluidRow(
             column(
               width=6,
-              withSpinner(DTOutput("gene_stage_scores_tbl"))
+              withSpinner(DTOutput("stage_gene_scores_tbl"))
             ),
             column(
               width=6,
-              uiOutput("gene_stage_summary_html"),
-              withSpinner(plotOutput("gene_stage_plot", height="800px")),
+              uiOutput("stage_gene_summary_html"),
+              withSpinner(plotOutput("stage_gene_plot", height="800px")),
               tagList(
                 tags$hr(),
                 column(
                   width=6,
                   tags$h3("Logistic regression results:"),
-                  tableOutput("gene_stage_details_tbl"),
+                  tableOutput("stage_gene_details_tbl"),
                 ),
                 column(
                   width=6,
                   tags$h3("TCGA survival associations:"),
-                  tableOutput("gene_stage_tcga_tbl")
+                  tableOutput("stage_gene_tcga_tbl")
                 ),
               ),
             ),
@@ -190,19 +190,19 @@ ui <- function(request) {
           fluidRow(
             column(
               width=6,
-              withSpinner(DTOutput("gene_set_stage_scores_tbl"))
+              withSpinner(DTOutput("stage_gene_set_scores_tbl"))
             ),
             column(
               width=6,
-              uiOutput("gene_set_stage_summary_html"),
-              withSpinner(plotOutput("gene_set_stage_plot", height="800px")),
+              uiOutput("stage_gene_set_summary_html"),
+              withSpinner(plotOutput("stage_gene_set_plot", height="800px")),
               tagList(
                 tags$hr(),
                 tags$h3("Regression results:"),
-                tableOutput("gene_set_stage_details_tbl"),
+                tableOutput("stage_gene_set_details_tbl"),
                 tags$hr(),
                 tags$h3("Genes:"),
-                tableOutput("gene_stage_set_gene_tbl"),
+                tableOutput("stage_gene_set_gene_tbl"),
               ),
             ),
           ),
@@ -232,16 +232,16 @@ ui <- function(request) {
           fluidRow(
             column(
               width=4,
-              withSpinner(DTOutput("gene_stage_transitions_tbl"))
+              withSpinner(DTOutput("stage_gene_transitions_tbl"))
             ),
             column(
               width=6,
-              withSpinner(plotOutput("gene_stage_transitions_plot", height="800px")),
+              withSpinner(plotOutput("stage_gene_transitions_plot", height="800px")),
             ),
             column(
               width=2,
               tags$h3("Individual datasets:"),
-              tableOutput("gene_stage_transitions_details_tbl")
+              tableOutput("stage_gene_transitions_details_tbl")
             )
           )
         ),
@@ -253,16 +253,16 @@ ui <- function(request) {
           fluidRow(
             column(
               width=4,
-              withSpinner(DTOutput("gene_set_stage_transitions_tbl"))
+              withSpinner(DTOutput("stage_gene_set_transitions_tbl"))
             ),
             column(
               width=6,
-              withSpinner(plotOutput("gene_set_stage_transitions_plot", height="800px")),
+              withSpinner(plotOutput("stage_gene_set_transitions_plot", height="800px")),
             ),
             column(
               width=2,
               tags$h3("Individual datasets:"),
-              tableOutput("gene_set_stage_transitions_details_tbl")
+              tableOutput("stage_gene_set_transitions_details_tbl")
             )
           )
         )
@@ -351,7 +351,9 @@ ui <- function(request) {
               width=2,
               fluidRow(
                 selectizeInput("coex_gene1", "Gene A:", choices=gene_coex_opts, selected=gene_coex_opts[1]),
-                selectizeInput("coex_gene2", "Gene B:", choices=gene_coex_opts, selected=gene_coex_opts[2])
+                selectizeInput("coex_gene2", "Gene B:", choices=gene_coex_opts, selected=gene_coex_opts[2]),
+                helpText("Scaled gene expression measurements are plotted against ",
+                         "each other for each dataset containing both genes / gene sets.")
               ),
             ),
             column(
@@ -387,11 +389,22 @@ ui <- function(request) {
         "Cell Lines",
         fluidRow(
           column(
-              width=6,
+                 width=2,
+                 helpText("This table shows transcripts-per-million (TPM) abundance estimates ",
+                          "for human myeloma cell line (HMCL) RNA-Seq data, generated using Salmon ",
+                          "with the GRCh38 reference genome.",
+                          "The measurements shown represent the average (mean) expression for all replicates.",
+                          tags$br(),
+                          "An earlier version of the expression data is available at the ",
+                          tags$a(href="https://www.keatslab.org/data-repository", "Keats Lab Data Repository")
+                )
+          ),
+          column(
+              width=5,
               withSpinner(DTOutput("hmcl_expr_tbl"))
           ),
           column(
-            width=6,
+            width=5,
             withSpinner(plotOutput("hmcl_hist_plot", height="800px")),
             fluidRow(
               column(

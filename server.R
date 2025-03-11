@@ -7,7 +7,7 @@ server <- function(input, output, session) {
   ############################################################
   # Shared elements
   ############################################################
-  output$surv_os_gene_tcga_tbl <- output$gene_stage_tcga_tbl <- output$treatment_gene_tcga_tbl <- renderTable({
+  output$surv_os_gene_tcga_tbl <- output$stage_gene_tcga_tbl <- output$treatment_gene_tcga_tbl <- renderTable({
     req(!is.null(selectedGene()))
     gene <- selectedGene()
 
@@ -16,9 +16,10 @@ server <- function(input, output, session) {
         select(-symbol, -ensgene)
   }, digits=4)
 
-  output$gene_stage_summary_html <- output$surv_os_gene_summary_html <- output$surv_pfs_gene_summary_html <- output$treatment_gene_summary_html <- renderUI({
+  output$stage_gene_summary_html <- output$surv_os_gene_summary_html <- output$surv_pfs_gene_summary_html <- output$treatment_gene_summary_html <- renderUI({
       req(!is.null(selectedGene()))
       gene <- selectedGene()
+
 
       all_rank <- gene_scores_all %>%
         filter(symbol == gene) %>%
@@ -32,7 +33,7 @@ server <- function(input, output, session) {
         filter(symbol == gene) %>%
         pull(Rank)
 
-      stage_rank <- gene_stage_scores %>%
+      stage_rank <- stage_gene_scores %>%
         filter(symbol == gene) %>%
         pull(Rank)
 
@@ -65,7 +66,7 @@ server <- function(input, output, session) {
       )
   })
 
-  output$gene_set_stage_summary_html <- output$surv_os_gene_set_summary_html  <- output$surv_pfs_gene_set_summary_html <- treatment_gene_set_summary_html <- renderUI({
+  output$stage_gene_set_summary_html <- output$surv_os_gene_set_summary_html  <- output$surv_pfs_gene_set_summary_html <- treatment_gene_set_summary_html <- renderUI({
       req(!is.null(selectedGeneSet()))
       selected_gene_set <- selectedGeneSet()
 
@@ -81,7 +82,7 @@ server <- function(input, output, session) {
         filter(gene_set == selected_gene_set) %>%
         pull(Rank)
 
-      stage_rank <- gene_set_stage_scores %>%
+      stage_rank <- stage_gene_set_scores %>%
         filter(gene_set == selected_gene_set) %>%
         pull(Rank)
 
@@ -151,17 +152,17 @@ server <- function(input, output, session) {
   surv_pfs_gene_set_selected <- reactive({
     surv_pfs_gene_set_scores$gene_set[input$surv_pfs_gene_set_scores_tbl_rows_selected]
   })
-  gene_stage_selected <- reactive({
-    gene_stage_scores$symbol[input$gene_stage_scores_tbl_rows_selected]
+  stage_gene_selected <- reactive({
+    stage_gene_scores$symbol[input$stage_gene_scores_tbl_rows_selected]
   })
-  gene_set_stage_selected <- reactive({
-    gene_set_stage_scores$gene_set[input$gene_set_stage_scores_tbl_rows_selected]
+  stage_gene_set_selected <- reactive({
+    stage_gene_set_scores$gene_set[input$stage_gene_set_scores_tbl_rows_selected]
   })
-  gene_stage_transitions_selected <- reactive({
-    gene_stage_transitions_df()$symbol[input$gene_stage_transitions_tbl_rows_selected]
+  stage_gene_transitions_selected <- reactive({
+    stage_gene_transitions_df()$symbol[input$stage_gene_transitions_tbl_rows_selected]
   })
-  gene_set_stage_transitions_selected <- reactive({
-    gene_set_stage_transitions_df()$gene_set[input$gene_set_stage_transitions_tbl_rows_selected]
+  stage_gene_set_transitions_selected <- reactive({
+    stage_gene_set_transitions_df()$gene_set[input$stage_gene_set_transitions_tbl_rows_selected]
   })
   treatment_gene_selected <- reactive({
     treatment_gene_scores$symbol[input$treatment_gene_scores_tbl_rows_selected]
@@ -185,17 +186,17 @@ server <- function(input, output, session) {
   observeEvent(input$surv_pfs_gene_set_scores_tbl_rows_selected, {
     selectedGeneSet(surv_pfs_gene_set_selected())
   })
-  observeEvent(input$gene_stage_scores_tbl_rows_selected, {
-    selectedGene(gene_stage_selected())
+  observeEvent(input$stage_gene_scores_tbl_rows_selected, {
+    selectedGene(stage_gene_selected())
   })
-  observeEvent(input$gene_set_stage_scores_tbl_rows_selected, {
-    selectedGeneSet(gene_set_stage_selected())
+  observeEvent(input$stage_gene_set_scores_tbl_rows_selected, {
+    selectedGeneSet(stage_gene_set_selected())
   })
-  observeEvent(input$gene_stage_transitions_tbl_rows_selected, {
-    selectedGene(gene_stage_transitions_selected())
+  observeEvent(input$stage_gene_transitions_tbl_rows_selected, {
+    selectedGene(stage_gene_transitions_selected())
   })
-  observeEvent(input$gene_set_stage_transitions_tbl_rows_selected, {
-    selectedGeneSet(gene_set_stage_transitions_selected())
+  observeEvent(input$stage_gene_set_transitions_tbl_rows_selected, {
+    selectedGeneSet(stage_gene_set_transitions_selected())
   })
   observeEvent(input$treatment_gene_scores_tbl_rows_selected, {
     selectedGene(treatment_gene_selected())
@@ -393,8 +394,6 @@ server <- function(input, output, session) {
   #---------------------------------------
   # Progression free survival > genes
   #---------------------------------------
-
-
   surv_pfs_gene_details <- reactive({
     req(input$surv_pfs_gene_scores_tbl_rows_selected)
 
@@ -574,17 +573,17 @@ server <- function(input, output, session) {
   #---------------------------------------
   # Disease Stage > genes
   #---------------------------------------
-  gene_stage_details <- reactive({
-    req(input$gene_stage_scores_tbl_rows_selected)
+  stage_gene_details <- reactive({
+    req(input$stage_gene_scores_tbl_rows_selected)
 
-    gene <- gene_stage_selected()
+    gene <- stage_gene_selected()
 
     df <- bind_rows(
-      gene_stage_pvals %>%
+      stage_gene_pvals %>%
         filter(symbol == gene),
-      gene_stage_effects %>%
+      stage_gene_effects %>%
         filter(symbol == gene),
-      gene_stage_errors %>%
+      stage_gene_errors %>%
         filter(symbol == gene)
     )
 
@@ -598,12 +597,12 @@ server <- function(input, output, session) {
       mutate(Dataset=str_replace(Dataset, "_disease_stage", ""))
   })
 
-  output$gene_stage_details_tbl <- renderTable({
-    gene_stage_details()
+  output$stage_gene_details_tbl <- renderTable({
+    stage_gene_details()
   }, digits=-3)
 
-  output$gene_stage_scores_tbl <- renderDT({
-    df <- gene_stage_scores %>%
+  output$stage_gene_scores_tbl <- renderDT({
+    df <- stage_gene_scores %>%
       select(Gene=symbol, Rank, `P-value\n(metap)`=sumz_wt_pval,
              `P-value\n(metafor)`=metafor_pval, Description=description,
              CHR=chr_region, `Cell Cycle`=cell_cycle_phase, `DGIdb\ncategories`=dgidb_categories)
@@ -613,12 +612,12 @@ server <- function(input, output, session) {
       formatSignif(columns=c("P-value\n(metap)", "P-value\n(metafor)"), digits=3)
   })
 
-  output$gene_stage_plot <- renderPlot({
-    req(input$gene_stage_scores_tbl_rows_selected)
+  output$stage_gene_plot <- renderPlot({
+    req(input$stage_gene_scores_tbl_rows_selected)
 
-    gene_name <- gene_stage_selected()
+    gene_name <- stage_gene_selected()
 
-    df <- gene_stage_scaled_expr %>%
+    df <- stage_gene_scaled_expr %>%
       filter(symbol == gene_name) %>%
       select(-symbol)
 
@@ -631,17 +630,17 @@ server <- function(input, output, session) {
   #---------------------------------------
   # Disease Stage > gene sets
   #---------------------------------------
-  gene_set_stage_details <- reactive({
-    req(input$gene_set_stage_scores_tbl_rows_selected)
+  stage_gene_set_details <- reactive({
+    req(input$stage_gene_set_scores_tbl_rows_selected)
 
-    selected_gene_set <- gene_set_stage_selected()
+    selected_gene_set <- stage_gene_set_selected()
 
     df <- bind_rows(
-      gene_set_stage_pvals %>%
+      stage_gene_set_pvals %>%
         filter(gene_set == selected_gene_set),
-      gene_set_stage_effects %>%
+      stage_gene_set_effects %>%
         filter(gene_set == selected_gene_set),
-      gene_set_stage_errors %>%
+      stage_gene_set_errors %>%
         filter(gene_set == selected_gene_set)
     )
 
@@ -655,21 +654,21 @@ server <- function(input, output, session) {
       mutate(Dataset=str_replace(Dataset, "_disease_stage", ""))
   })
 
-  output$gene_set_stage_details_tbl <- renderTable({
-    gene_set_stage_details()
+  output$stage_gene_set_details_tbl <- renderTable({
+    stage_gene_set_details()
   }, digits=-3)
 
-  output$gene_set_gene_stage_tbl <- renderTable({
-    req(input$gene_set_stage_scores_tbl_rows_selected)
+  output$gene_set_stage_gene_tbl <- renderTable({
+    req(input$stage_gene_set_scores_tbl_rows_selected)
 
-    selected_gene_set <- gene_set_stage_scores$gene_set[input$gene_set_stage_scores_tbl_rows_selected]
+    selected_gene_set <- stage_gene_set_scores$gene_set[input$stage_gene_set_scores_tbl_rows_selected]
 
     genes <- gene_set_mdata %>%
       filter(gene_set == selected_gene_set) %>%
       pull(genes) %>%
       unlist()
 
-    gene_stage_scores %>%
+    stage_gene_scores %>%
       filter(symbol %in% genes) %>%
       select(Gene=symbol, `Rank (Disease Stage)`=Rank,
              `P-value\n(metap)`=sumz_wt_pval, `P-value (metafor)`=metafor_pval,
@@ -678,8 +677,8 @@ server <- function(input, output, session) {
 
   }, digits=4)
 
-  output$gene_set_stage_scores_tbl <- renderDT({
-    df <- gene_set_stage_scores %>%
+  output$stage_gene_set_scores_tbl <- renderDT({
+    df <- stage_gene_set_scores %>%
       select(`Gene set`=gene_set, everything())
 
     DT::datatable(df, style="bootstrap", escape=FALSE,  rownames=FALSE,
@@ -687,12 +686,12 @@ server <- function(input, output, session) {
       formatSignif(columns=c("P-value\n(metap)", "P-value\n(metafor)"), digits=3)
   })
 
-  output$gene_set_stage_plot <- renderPlot({
-    req(input$gene_set_stage_scores_tbl_rows_selected)
+  output$stage_gene_set_plot <- renderPlot({
+    req(input$stage_gene_set_scores_tbl_rows_selected)
 
-    gene_set_name <- gene_set_stage_selected()
+    gene_set_name <- stage_gene_set_selected()
 
-    df <- gene_set_stage_scaled_expr %>%
+    df <- stage_gene_set_scaled_expr %>%
       filter(gene_set == gene_set_name) %>%
       select(-gene_set)
 
@@ -709,7 +708,7 @@ server <- function(input, output, session) {
   #---------------------------------------
   # Disease Stage Transitions > genes
   #---------------------------------------
-  gene_stage_transitions_df <- reactive({
+  stage_gene_transitions_df <- reactive({
     req(input$transition_feat_type)
     req(input$transition_opt)
 
@@ -719,8 +718,8 @@ server <- function(input, output, session) {
       mutate(median_change=100 * median_change)
   })
 
-  output$gene_stage_transitions_tbl <- renderDT({
-    df <- gene_stage_transitions_df() %>%
+  output$stage_gene_transitions_tbl <- renderDT({
+    df <- stage_gene_transitions_df() %>%
       select(Gene=symbol, `# datasets`=num_datasets, `ΔExpr (ranking %)`=median_change)
 
     format_fields <- c("ΔExpr (ranking %)")
@@ -730,10 +729,10 @@ server <- function(input, output, session) {
       formatSignif(columns=format_fields, digits=3)
   })
 
-  gene_stage_transitions_details_df <- reactive({
-    req(input$gene_stage_transitions_tbl_rows_selected)
+  stage_gene_transitions_details_df <- reactive({
+    req(input$stage_gene_transitions_tbl_rows_selected)
 
-    selected_gene <- gene_stage_transitions_selected()
+    selected_gene <- stage_gene_transitions_selected()
 
     df <- gene_transitions[[input$transition_opt]] %>%
       filter(symbol == selected_gene) %>%
@@ -749,7 +748,7 @@ server <- function(input, output, session) {
     # add median expr for each stage
     stages <- transition_stages[[input$transition_opt]]
 
-    stage_expr <- gene_stage_scaled_expr %>%
+    stage_expr <- stage_gene_scaled_expr %>%
       filter(symbol == selected_gene) %>%
       filter(stage %in% stages) %>%
       select(Accession=dataset, Dataset=dataset_name, stage, expr) %>%
@@ -763,20 +762,20 @@ server <- function(input, output, session) {
       arrange(Dataset)
   })
 
-  output$gene_stage_transitions_details_tbl <- renderTable({
-    req(input$gene_stage_transitions_tbl_rows_selected)
-    gene_stage_transitions_details_df()
+  output$stage_gene_transitions_details_tbl <- renderTable({
+    req(input$stage_gene_transitions_tbl_rows_selected)
+    stage_gene_transitions_details_df()
   }, digits=3)
 
-  output$gene_stage_transitions_plot <- renderPlot({
-    req(input$gene_stage_transitions_tbl_rows_selected)
+  output$stage_gene_transitions_plot <- renderPlot({
+    req(input$stage_gene_transitions_tbl_rows_selected)
 
-    gene_name <- gene_stage_transitions_selected()
+    gene_name <- stage_gene_transitions_selected()
 
     # determine which datasets include the relevant disease stages
-    datasets <- gene_stage_transitions_details_df()$Accession
+    datasets <- stage_gene_transitions_details_df()$Accession
 
-    df <- gene_stage_scaled_expr %>%
+    df <- stage_gene_scaled_expr %>%
       filter(symbol == gene_name) %>%
       filter(dataset %in% datasets) %>%
       select(-symbol)
@@ -797,7 +796,7 @@ server <- function(input, output, session) {
   #---------------------------------------
   # Disease Stage Transitions > gene sets
   #---------------------------------------
-  gene_set_stage_transitions_df <- reactive({
+  stage_gene_set_transitions_df <- reactive({
     req(input$transition_feat_type)
     req(input$transition_opt)
 
@@ -807,8 +806,8 @@ server <- function(input, output, session) {
       mutate(median_change=100 * median_change)
   })
 
-  output$gene_set_stage_transitions_tbl <- renderDT({
-    df <- gene_set_stage_transitions_df() %>%
+  output$stage_gene_set_transitions_tbl <- renderDT({
+    df <- stage_gene_set_transitions_df() %>%
       select(`Gene set`=gene_set, `# datasets`=num_datasets, `ΔExpr (ranking %)`=median_change)
 
     format_fields <- c("ΔExpr (ranking %)")
@@ -818,10 +817,10 @@ server <- function(input, output, session) {
       formatSignif(columns=format_fields, digits=3)
   })
 
-  gene_set_stage_transitions_details_df <- reactive({
-    req(input$gene_set_stage_transitions_tbl_rows_selected)
+  stage_gene_set_transitions_details_df <- reactive({
+    req(input$stage_gene_set_transitions_tbl_rows_selected)
 
-    selected_gene_set <- gene_set_stage_transitions_selected()
+    selected_gene_set <- stage_gene_set_transitions_selected()
 
     df <- gene_set_transitions[[input$transition_opt]] %>%
       filter(gene_set == selected_gene_set) %>%
@@ -837,7 +836,7 @@ server <- function(input, output, session) {
     # add median expr for each stage
     stages <- transition_stages[[input$transition_opt]]
 
-    stage_expr <- gene_set_stage_scaled_expr %>%
+    stage_expr <- stage_gene_set_scaled_expr %>%
       filter(gene_set == selected_gene_set) %>%
       filter(stage %in% stages) %>%
       select(Accession=dataset, Dataset=dataset_name, stage, expr) %>%
@@ -851,20 +850,20 @@ server <- function(input, output, session) {
       arrange(Dataset)
   })
 
-  output$gene_set_stage_transitions_details_tbl <- renderTable({
-    req(input$gene_set_stage_transitions_tbl_rows_selected)
-    gene_set_stage_transitions_details_df()
+  output$stage_gene_set_transitions_details_tbl <- renderTable({
+    req(input$stage_gene_set_transitions_tbl_rows_selected)
+    stage_gene_set_transitions_details_df()
   }, digits=3)
 
-  output$gene_set_stage_transitions_plot <- renderPlot({
-    req(input$gene_set_stage_transitions_tbl_rows_selected)
+  output$stage_gene_set_transitions_plot <- renderPlot({
+    req(input$stage_gene_set_transitions_tbl_rows_selected)
 
-    gene_set_name <- gene_set_stage_transitions_selected()
+    gene_set_name <- stage_gene_set_transitions_selected()
 
     # determine which datasets include the relevant disease stages
-    datasets <- gene_set_stage_transitions_details_df()$Accession
+    datasets <- stage_gene_set_transitions_details_df()$Accession
 
-    df <- gene_set_stage_scaled_expr %>%
+    df <- stage_gene_set_scaled_expr %>%
       filter(gene_set == gene_set_name) %>%
       filter(dataset %in% datasets) %>%
       select(-gene_set)
